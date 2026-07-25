@@ -377,7 +377,7 @@ def test_chat_rejects_gateway_header_mismatch(token: str):
     assert response.json()['code'] == 'UNAUTHORIZED'
 
 
-def test_chat_rejects_missing_required_jwt_claim():
+def test_chat_accepts_jwt_without_optional_app_id():
     token = jwt.encode(
         {
             'sub': 'user-1',
@@ -393,8 +393,8 @@ def test_chat_rejects_missing_required_jwt_claim():
             headers={'Authorization': f'Bearer {token}'},
             json={'message': 'Hello there'},
         )
-    assert response.status_code == 401
-    assert response.json()['code'] == 'UNAUTHORIZED'
+    assert response.status_code == 200
+    assert response.json()['answer'] == 'stubbed response'
 
 
 def test_chat_rejects_expired_jwt():
@@ -469,4 +469,15 @@ def test_tool_executor_builds_vidhya_context_from_runtime_context():
     assert metadata['organization_id'] == 'org-1'
     assert metadata['permissions'] == ['academic:read']
 
+
+
+
+
+def test_settings_accepts_core_gateway_jwt_secret_alias(monkeypatch):
+    from app.config.settings import Settings
+
+    monkeypatch.delenv('AI_RUNTIME_JWT_SECRET', raising=False)
+    monkeypatch.setenv('JWT_SECRET', TEST_SECRET)
+    settings = Settings()
+    assert settings.jwt_secret == TEST_SECRET
 

@@ -1,4 +1,4 @@
-# Yn AI Setu AI Runtime - Phase 1
+﻿# Yn AI Setu AI Runtime - Phase 1
 
 ## What this is
 
@@ -95,7 +95,7 @@ Behavior:
 
 ```env
 AI_RUNTIME_BYPASS_AUTH=false
-AI_RUNTIME_JWT_SECRET=<same secret used by Auth Service>
+AI_RUNTIME_JWT_SECRET=<same secret used by Auth Service or Core API Gateway JWT_SECRET>
 AI_RUNTIME_JWT_ALGORITHM=HS256
 ```
 
@@ -112,7 +112,7 @@ With that setup:
 2. `RequestContextMiddleware` creates or propagates `requestId`, `correlationId`, and `conversationId`
 3. Authentication path depends on configuration:
    - bypass enabled: local development `RuntimeContext` is created
-   - bypass disabled: JWT bearer token is validated using `AI_RUNTIME_JWT_SECRET` and `AI_RUNTIME_JWT_ALGORITHM`
+   - bypass disabled: JWT bearer token is validated using `AI_RUNTIME_JWT_SECRET`/`AI_RUNTIME_JWT_ALGORITHM`; runtime also accepts Core Gateway-compatible aliases `JWT_SECRET`/`JWT_ALGORITHM`
 4. `RuntimeContext` is attached to the request
 5. `ChatService` builds `RuntimeState`
 6. `WorkflowManager` runs the static LangGraph workflow
@@ -179,3 +179,4 @@ uvicorn app.main:app --reload
 ```bash
 pytest
 ```
+

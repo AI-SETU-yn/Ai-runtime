@@ -40,7 +40,7 @@ class JwtService:
 class JwtClaimsMapper:
     """Map gateway-compatible JWT claims into one request-scoped runtime context."""
 
-    REQUIRED_CLAIMS = ('sub', 'organizationId', 'branchId', 'appId')
+    REQUIRED_CLAIMS = ('sub', 'organizationId', 'branchId')
 
     def from_request(self, claims: dict[str, Any], token: str, request: Request) -> RuntimeContext:
         missing = [claim for claim in self.REQUIRED_CLAIMS if not self._claim_value(claims, claim)]
@@ -51,15 +51,16 @@ class JwtClaimsMapper:
         user_id = str(claims.get('userId') or subject)
         organization_id = str(claims['organizationId'])
         branch_id = str(claims['branchId'])
-        app_id = str(claims['appId'])
+        app_id = self._optional_string(claims.get('appId'))
 
         self._validate_gateway_header(request, GATEWAY_USER_HEADER, user_id, subject)
         self._validate_gateway_header(request, GATEWAY_ORG_HEADER, organization_id)
         self._validate_gateway_header(request, GATEWAY_BRANCH_HEADER, branch_id)
-        self._validate_gateway_header(request, GATEWAY_APP_HEADER, app_id)
+        if app_id is not None:
+            self._validate_gateway_header(request, GATEWAY_APP_HEADER, app_id)
 
         application_ids = self._as_string_list(claims.get('applicationIds') or claims.get('appIds') or [])
-        if app_id not in application_ids:
+        if app_id and app_id not in application_ids:
             application_ids = [app_id, *application_ids]
 
         return RuntimeContext(
@@ -215,3 +216,5 @@ async def get_runtime_context(
         runtime_context.trace_id,
     )
     return runtime_context
+
+

@@ -2,7 +2,7 @@
 from pathlib import Path
 from typing import Literal
 
-from pydantic import Field
+from pydantic import AliasChoices, Field
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -22,8 +22,8 @@ class Settings(BaseSettings):
     debug: bool = False
     bypass_auth: bool = False
 
-    jwt_secret: str = ''
-    jwt_algorithm: str = 'HS256'
+    jwt_secret: str = Field(default='', validation_alias=AliasChoices('JWT_SECRET', 'AI_RUNTIME_JWT_SECRET'))
+    jwt_algorithm: str = Field(default='HS256', validation_alias=AliasChoices('JWT_ALGORITHM', 'AI_RUNTIME_JWT_ALGORITHM'))
 
     model_gateway_url: str = 'http://localhost:9000'
     model_gateway_chat_path: str = '/generate'
@@ -51,3 +51,4 @@ class Settings(BaseSettings):
 @lru_cache(maxsize=1)
 def get_settings() -> Settings:
     return Settings()
+
