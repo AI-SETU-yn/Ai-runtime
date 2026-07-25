@@ -1,4 +1,4 @@
-from __future__ import annotations
+﻿from __future__ import annotations
 
 import logging
 from time import perf_counter
@@ -60,7 +60,7 @@ class ToolExecutorService:
             'lookup_latency_ms': lookup_latency_ms,
         }))
 
-        mcp_arguments = self._build_arguments(planner_output.parameters, runtime_context, correlation_id)
+        mcp_arguments = self._build_arguments(planner_output.parameters, runtime_context, request_id, correlation_id, trace_id)
         mcp_context = self._build_context(runtime_context, request_id, correlation_id, trace_id)
         logger.info('tool_execution_request_json\n%s', pretty_json({
             'tool': resolved_tool.tool.name,
@@ -132,13 +132,25 @@ class ToolExecutorService:
             ) from exc
 
     @staticmethod
-    def _build_arguments(parameters: dict[str, object], runtime_context: RuntimeContext, correlation_id: str) -> dict[str, Any]:
+    def _build_arguments(
+        parameters: dict[str, object],
+        runtime_context: RuntimeContext,
+        request_id: str,
+        correlation_id: str,
+        trace_id: str,
+    ) -> dict[str, Any]:
         arguments = dict(parameters)
         arguments['context'] = {
             'organization_id': runtime_context.organization_id or '',
             'branch_id': runtime_context.branch_id or '',
             'user_id': runtime_context.user_id,
+            'tenant_id': runtime_context.tenant_id,
+            'locale': runtime_context.locale,
+            'app_id': runtime_context.app_id,
+            'session_id': runtime_context.session_id,
+            'request_id': request_id,
             'correlation_id': correlation_id,
+            'trace_id': trace_id,
         }
         return arguments
 
@@ -154,10 +166,17 @@ class ToolExecutorService:
             'correlation_id': correlation_id,
             'trace_id': trace_id,
             'user_id': runtime_context.user_id,
+            'subject': runtime_context.subject,
             'org_id': runtime_context.organization_id,
+            'organization_id': runtime_context.organization_id,
             'branch_id': runtime_context.branch_id,
+            'app_id': runtime_context.app_id,
+            'application_ids': runtime_context.application_ids,
             'roles': runtime_context.roles,
+            'permissions': runtime_context.permissions,
             'jwt': runtime_context.jwt,
             'locale': runtime_context.locale,
             'tenant_id': runtime_context.tenant_id,
+            'session_id': runtime_context.session_id,
         }
+

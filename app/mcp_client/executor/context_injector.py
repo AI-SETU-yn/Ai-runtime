@@ -11,11 +11,17 @@ ALLOWED_CONTEXT_FIELDS = frozenset(
         'tenant_id',
         'trace_id',
         'user_id',
+        'subject',
         'org_id',
+        'organization_id',
         'branch_id',
+        'app_id',
+        'application_ids',
         'roles',
+        'permissions',
         'jwt',
         'locale',
+        'session_id',
     }
 )
 
@@ -44,3 +50,4 @@ class ContextInjector:
             raise RequestValidationError(f"Runtime context fields must be JSON serializable: {', '.join(invalid)}")
         meta = {**request.params.meta, **context}
         return request.model_copy(update={'params': request.params.model_copy(update={'meta': meta})})
+

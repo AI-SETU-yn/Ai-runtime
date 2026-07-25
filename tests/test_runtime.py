@@ -1,5 +1,6 @@
-import os
+﻿import os
 import tempfile
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
 import jwt
@@ -123,6 +124,7 @@ def token():
             'userId': 'user-1',
             'organizationId': 'org-1',
             'branchId': 'branch-1',
+            'appId': 'vidhya',
             'tenantId': 'tenant-1',
             'locale': 'en-IN',
             'applicationIds': ['hrms'],
@@ -162,6 +164,7 @@ def test_runtime_context_factory():
             'userId': 'user-2',
             'organizationId': 'org-1',
             'branchId': 'branch-1',
+            'appId': 'vidhya',
             'tenantId': 'tenant-1',
             'locale': 'en-IN',
             'applicationIds': ['hrms'],
@@ -174,6 +177,7 @@ def test_runtime_context_factory():
     assert context.user_id == 'user-2'
     assert context.tenant_id == 'tenant-1'
     assert context.branch_id == 'branch-1'
+    assert context.app_id == 'vidhya'
     assert context.locale == 'en-IN'
     assert context.jwt == 'raw-jwt-token'
 
@@ -183,6 +187,7 @@ def test_local_development_runtime_context_factory():
     assert context.user_id == 'developer'
     assert context.tenant_id == 'yn'
     assert context.organization_id == 'yntec'
+    assert context.app_id == 'vidhya'
     assert context.roles == ['SUPER_ADMIN']
     assert context.permissions == ['*']
 
@@ -333,3 +338,135 @@ async def test_model_gateway_client_error_mapping():
     client = ModelGatewayClient(Settings())
     with pytest.raises(Exception):
         await client.generate('hi')
+
+
+
+def test_chat_accepts_gateway_forwarded_headers_matching_jwt(token: str):
+    with create_test_client(bypass_auth=False) as client:
+        response = client.post(
+            '/chat',
+            headers={
+                'Authorization': f'Bearer {token}',
+                'X-USER-Id': 'user-1',
+                'X-ORG-Id': 'org-1',
+                'X-BRANCH-Id': 'branch-1',
+                'X-APP-Id': 'vidhya',
+                'X-Request-Id': 'req-1',
+                'X-Correlation-Id': 'corr-1',
+                'X-Trace-Id': 'trace-1',
+            },
+            json={'message': 'Hello there'},
+        )
+    assert response.status_code == 200
+    assert response.json()['metadata']['request_id'] == 'req-1'
+    assert response.json()['metadata']['correlation_id'] == 'corr-1'
+    assert response.json()['metadata']['trace_id'] == 'trace-1'
+
+
+def test_chat_rejects_gateway_header_mismatch(token: str):
+    with create_test_client(bypass_auth=False) as client:
+        response = client.post(
+            '/chat',
+            headers={
+                'Authorization': f'Bearer {token}',
+                'X-ORG-Id': 'other-org',
+            },
+            json={'message': 'Hello there'},
+        )
+    assert response.status_code == 401
+    assert response.json()['code'] == 'UNAUTHORIZED'
+
+
+def test_chat_rejects_missing_required_jwt_claim():
+    token = jwt.encode(
+        {
+            'sub': 'user-1',
+            'organizationId': 'org-1',
+            'branchId': 'branch-1',
+        },
+        TEST_SECRET,
+        algorithm='HS256',
+    )
+    with create_test_client(bypass_auth=False) as client:
+        response = client.post(
+            '/chat',
+            headers={'Authorization': f'Bearer {token}'},
+            json={'message': 'Hello there'},
+        )
+    assert response.status_code == 401
+    assert response.json()['code'] == 'UNAUTHORIZED'
+
+
+def test_chat_rejects_expired_jwt():
+    token = jwt.encode(
+        {
+            'sub': 'user-1',
+            'organizationId': 'org-1',
+            'branchId': 'branch-1',
+            'appId': 'vidhya',
+            'exp': datetime.now(timezone.utc) - timedelta(minutes=1),
+        },
+        TEST_SECRET,
+        algorithm='HS256',
+    )
+    with create_test_client(bypass_auth=False) as client:
+        response = client.post(
+            '/chat',
+            headers={'Authorization': f'Bearer {token}'},
+            json={'message': 'Hello there'},
+        )
+    assert response.status_code == 401
+    assert response.json()['code'] == 'UNAUTHORIZED'
+
+
+def test_chat_rejects_invalid_signature():
+    token = jwt.encode(
+        {
+            'sub': 'user-1',
+            'organizationId': 'org-1',
+            'branchId': 'branch-1',
+            'appId': 'vidhya',
+        },
+        'wrong-secret-012345678901234567890123',
+        algorithm='HS256',
+    )
+    with create_test_client(bypass_auth=False) as client:
+        response = client.post(
+            '/chat',
+            headers={'Authorization': f'Bearer {token}'},
+            json={'message': 'Hello there'},
+        )
+    assert response.status_code == 401
+    assert response.json()['code'] == 'UNAUTHORIZED'
+
+
+def test_tool_executor_builds_vidhya_context_from_runtime_context():
+    from app.models.runtime import RuntimeContext
+    from app.tool_executor.service import ToolExecutorService
+
+    context = RuntimeContext(
+        subject='user-1',
+        user_id='user-1',
+        organization_id='org-1',
+        branch_id='branch-1',
+        app_id='vidhya',
+        tenant_id='tenant-1',
+        locale='en-IN',
+        application_ids=['vidhya'],
+        roles=['admin'],
+        permissions=['academic:read'],
+        session_id='session-1',
+        jwt='jwt-token',
+    )
+    arguments = ToolExecutorService._build_arguments({}, context, 'req-1', 'corr-1', 'trace-1')
+    metadata = ToolExecutorService._build_context(context, 'req-1', 'corr-1', 'trace-1')
+
+    assert arguments['context']['organization_id'] == 'org-1'
+    assert arguments['context']['branch_id'] == 'branch-1'
+    assert arguments['context']['user_id'] == 'user-1'
+    assert arguments['context']['tenant_id'] == 'tenant-1'
+    assert metadata['jwt'] == 'jwt-token'
+    assert metadata['organization_id'] == 'org-1'
+    assert metadata['permissions'] == ['academic:read']
+
+

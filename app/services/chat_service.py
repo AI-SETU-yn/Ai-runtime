@@ -19,7 +19,14 @@ class ChatService:
     async def chat(self, request: ChatRequest, runtime_context: RuntimeContext, request_id: str, correlation_id: str) -> ChatResponse:
         started_at = time.perf_counter()
         conversation_id = request.conversation_id or str(uuid.uuid4())
-        trace_id = str(uuid.uuid4())
+        trace_id = runtime_context.trace_id or str(uuid.uuid4())
+        runtime_context = runtime_context.model_copy(
+            update={
+                'request_id': request_id,
+                'correlation_id': correlation_id,
+                'trace_id': trace_id,
+            }
+        )
 
         logger.info('chat_request_json\n%s', pretty_json({
             'message': request.message,
