@@ -1,0 +1,51 @@
+# Virtual Environment
+.venv/
+venv/
+env/
+
+# Python
+__pycache__/
+*.py[cod]
+*.pyo
+
+# Environment variables
+.env
+.env.*
+
+# IDE
+.vscode/
+.idea/
+
+# Logs
+*.log
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Models
+models/
+*.bin
+*.pt
+*.pth
+*.safetensors
+*.onnx
+
+# Hugging Face cache
+.cache/
+huggingface/
+
+# PyTorch
+torch_extensions/
+
+# Jupyter
+.ipynb_checkpoints/
+
+# Build
+dist/
+build/
+*.egg-info/
+
+# Testing
+.pytest_cache/
+.coverage
