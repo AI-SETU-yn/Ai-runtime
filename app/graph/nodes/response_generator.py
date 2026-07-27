@@ -1,4 +1,5 @@
 import logging
+from typing import Any
 
 from app.graph.state import RuntimeState
 from app.model_gateway.client import ModelGatewayClient
@@ -16,6 +17,18 @@ class ResponseGeneratorNode:
     async def __call__(self, state: RuntimeState):
         planner_output = state.planner_output
         assert planner_output is not None
+        if self._tool_failed(state.tool_execution_result):
+            answer = self._tool_failure_answer(state.tool_execution_result)
+            logger.warning('response_generation_skipped_failed_tool_json\n%s', pretty_json({
+                'planner_intent': planner_output.intent,
+                'tool_execution_result': state.tool_execution_result,
+                'final_response': answer,
+            }))
+            return {
+                'model_response': answer,
+                'final_response': answer,
+            }
+
         prompt = self._prompt_builder.build_response_prompt(
             state.user_question,
             planner_output.intent,
@@ -54,3 +67,38 @@ class ResponseGeneratorNode:
             'model_response': answer,
             'final_response': answer,
         }
+
+    @staticmethod
+    def _tool_failed(tool_execution_result: dict[str, object] | None) -> bool:
+        if not isinstance(tool_execution_result, dict):
+            return False
+        if tool_execution_result.get('success') is False or tool_execution_result.get('status') == 'error':
+            return True
+        data = tool_execution_result.get('data')
+        return isinstance(data, dict) and data.get('isError') is True
+
+    @classmethod
+    def _tool_failure_answer(cls, tool_execution_result: dict[str, object] | None) -> str:
+        detail = cls._extract_tool_error_detail(tool_execution_result)
+        if detail:
+            return f"I couldn't fetch the requested enterprise data. {detail}"
+        return "I couldn't fetch the requested enterprise data because the tool call failed. Please try again after refreshing your session."
+
+    @classmethod
+    def _extract_tool_error_detail(cls, value: Any) -> str | None:
+        if isinstance(value, dict):
+            content = value.get('content')
+            if isinstance(content, list):
+                for item in content:
+                    if isinstance(item, dict) and isinstance(item.get('text'), str):
+                        return item['text']
+            for key in ('content', 'data', 'error', 'message', 'text'):
+                detail = cls._extract_tool_error_detail(value.get(key))
+                if detail:
+                    return detail
+        if isinstance(value, list):
+            for item in value:
+                detail = cls._extract_tool_error_detail(item)
+                if detail:
+                    return detail
+        return value if isinstance(value, str) and value else None

@@ -10,7 +10,7 @@ from app.services.dependencies import get_chat_service
 router = APIRouter()
 
 
-@router.get('/health', response_model=HealthResponse)
+@router.get('/health', response_model=HealthResponse) 
 async def health() -> HealthResponse:
     return HealthResponse(status='ok')
 

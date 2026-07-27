@@ -506,9 +506,59 @@ def test_tool_executor_builds_vidhya_context_from_runtime_context():
     assert arguments['context']['branch_id'] == 'branch-1'
     assert arguments['context']['user_id'] == 'user-1'
     assert arguments['context']['tenant_id'] == 'tenant-1'
+    assert arguments['context']['authorization'] == 'Bearer jwt-token'
     assert metadata['jwt'] == 'jwt-token'
     assert metadata['organization_id'] == 'org-1'
     assert metadata['permissions'] == ['academic:read']
+
+
+@pytest.mark.asyncio
+async def test_response_generator_skips_model_gateway_when_tool_failed():
+    from app.graph.nodes.response_generator import ResponseGeneratorNode
+    from app.graph.state import RuntimeState
+    from app.models.planner import PlannerOutput
+    from app.models.runtime import RuntimeContext
+
+    class FailingModelGateway:
+        async def generate(self, prompt: str, *, metadata=None) -> str:
+            raise AssertionError('model gateway should not be called when tool execution failed')
+
+    state = RuntimeState(
+        conversation_id='conv-1',
+        request_id='req-1',
+        correlation_id='corr-1',
+        runtime_context=RuntimeContext(subject='user-1', user_id='user-1'),
+        user_question='Show all academic years',
+        planner_output=PlannerOutput(
+            intent='academic.academic_year.list',
+            requires_tool=True,
+            domain='vidhya',
+            service='academic',
+            entity='academic_year',
+            operation='list',
+        ),
+        tool_execution_result={
+            'success': False,
+            'status': 'error',
+            'error': {
+                'message': 'MCP tool returned isError=true',
+                'data': {
+                    'content': [
+                        {
+                            'type': 'text',
+                            'text': 'Downstream service returned HTTP 401 Unauthorized.',
+                        }
+                    ],
+                    'isError': True,
+                },
+            },
+        },
+    )
+
+    result = await ResponseGeneratorNode(PromptBuilder(), FailingModelGateway()).__call__(state)
+
+    assert 'Downstream service returned HTTP 401 Unauthorized.' in result['final_response']
+    assert result['model_response'] == result['final_response']
 
 
 

@@ -62,12 +62,12 @@ class ToolExecutorService:
 
         mcp_arguments = self._build_arguments(planner_output.parameters, runtime_context, request_id, correlation_id, trace_id)
         mcp_context = self._build_context(runtime_context, request_id, correlation_id, trace_id)
-        logger.info('tool_execution_request_json\n%s', pretty_json({
+        logger.info('tool_execution_request_json\n%s', pretty_json(self._redact_sensitive({
             'tool': resolved_tool.tool.name,
             'server': resolved_tool.server,
             'arguments': mcp_arguments,
             'context': mcp_context,
-        }))
+        })))
 
         tool_started = perf_counter()
         try:
@@ -144,6 +144,7 @@ class ToolExecutorService:
             'organization_id': runtime_context.organization_id or '',
             'branch_id': runtime_context.branch_id or '',
             'user_id': runtime_context.user_id,
+            'authorization': ToolExecutorService._authorization_header(runtime_context.jwt),
             'tenant_id': runtime_context.tenant_id,
             'locale': runtime_context.locale,
             'app_id': runtime_context.app_id,
@@ -180,3 +181,21 @@ class ToolExecutorService:
             'session_id': runtime_context.session_id,
         }
 
+    @staticmethod
+    def _authorization_header(jwt_token: str | None) -> str | None:
+        if not jwt_token:
+            return None
+        if jwt_token.lower().startswith('bearer '):
+            return jwt_token
+        return f'Bearer {jwt_token}'
+
+    @classmethod
+    def _redact_sensitive(cls, value: Any) -> Any:
+        if isinstance(value, dict):
+            return {
+                key: '<redacted>' if key in {'jwt', 'authorization'} and item else cls._redact_sensitive(item)
+                for key, item in value.items()
+            }
+        if isinstance(value, list):
+            return [cls._redact_sensitive(item) for item in value]
+        return value
