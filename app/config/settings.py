@@ -34,7 +34,7 @@ class Settings(BaseSettings):
     model_gateway_read_timeout_seconds: float = 30.0
     model_gateway_max_retries: int = 2
 
-    mcp_servers_config_path: Path = Path('config/mcp_servers.yaml')
+    mcp_servers_config_path: Path = Path('app/mcp_client/config/servers.yaml')
     mcp_connect_timeout_seconds: float = 5.0
     mcp_read_timeout_seconds: float = 30.0
     mcp_write_timeout_seconds: float = 10.0

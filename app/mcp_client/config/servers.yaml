@@ -2,6 +2,8 @@ servers:
   hrms:
     url: http://hrms-mcp:8080
     transport: streamable-http
-  vidhya:
+    endpoint_path: /mcp
+  vidhya-mcp:
     url: env:VIDHYA_MCP_URL|http://localhost:8001
     transport: streamable-http
+    endpoint_path: /mcp

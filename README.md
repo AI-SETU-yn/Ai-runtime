@@ -1,30 +1,25 @@
-﻿# Yn AI Setu AI Runtime - Phase 1
+# Yn AI Setu AI Runtime v2
 
-## What this is
+## What This Is
 
-Production-oriented Phase 1 foundation for the Yn AI Setu AI Runtime, refactored into a more scalable enterprise architecture without changing existing API behavior.
-
-
-
+AI Runtime v2 is the FastAPI service that receives chat requests, builds a request-scoped runtime context, plans the user intent through the Model Gateway, resolves tool-backed intents through the tool registry, invokes MCP tools, and asks the Model Gateway to generate the final answer.
 
 Implemented scope:
 - `POST /chat`
 - `GET /health`
 - `GET /ready`
-- JWT validation
+- JWT validation with Core Gateway-compatible aliases
 - optional local development auth bypass
-- request-scoped runtime context
-- static LangGraph workflow foundation
+- request/correlation/conversation/trace IDs
+- LangGraph workflow
 - planner node
+- tool registry
+- MCP client and tool execution
 - model gateway client
-- structured request logging
-- correlation/request/conversation IDs
+- structured request/runtime/tool logs
 - unit tests
 
-Not implemented in this phase:
-- MCP
-- tool registry
-- tool execution
+Not implemented yet:
 - approvals
 - memory
 - streaming responses
@@ -33,110 +28,88 @@ Not implemented in this phase:
 - LiteLLM integration
 - LoRA integration
 
-## Folder structure
+## Folder Structure
 
 - `app/api`: FastAPI routes
-- `app/config`: settings and environment configuration
+- `app/config`: top-level app settings and environment configuration
 - `app/conversation`: request, correlation, and conversation context management
 - `app/exceptions`: domain exceptions and handlers
 - `app/graph`: LangGraph state, graph builder, and node modules
+- `app/mcp_client`: MCP server config, connection pooling, transport, execution, and response parsing
 - `app/middleware`: HTTP middleware for request context and timing
 - `app/model_gateway`: gateway-facing client, config model, and gateway exceptions
-- `app/models`: domain-separated API, runtime, planner, response, and error models
-- `app/planner`: planner service, parser, prompts, and planner-specific models
+- `app/models`: shared API, runtime, planner, response, and error models
+- `app/planner`: planner service, parser, and prompts
 - `app/prompts`: generic prompt templates and prompt builder
 - `app/security`: JWT validation and runtime-context construction
 - `app/services`: service layer and dependency assembly
-- `app/utils`: logging configuration
+- `app/tool_executor`: registry-backed MCP execution orchestration
+- `app/tool_registry`: YAML registry loader, repository, models, and lookup service
+- `app/utils`: logging helpers
+- `tool-registry`: business tool definitions consumed by the runtime
 
-## Architecture
+## Startup Flow
 
-The runtime is intentionally layered:
+1. `create_app()` builds the FastAPI app and registers CORS, request context middleware, exception handlers, and runtime routes.
+2. On lifespan startup, `get_settings()` reads `.env` and `AI_RUNTIME_*` variables.
+3. Logging is configured, and local auth bypass is warned if enabled.
+4. `ToolRegistryService.initialize()` loads YAML files from `AI_RUNTIME_TOOL_REGISTRY_PATH`, defaulting to `tool-registry`.
+5. `get_mcp_client()` creates the MCP client, loads MCP servers from `AI_RUNTIME_MCP_SERVERS_CONFIG_PATH`, and registers each server.
+6. `ModelGatewayClient`, `PlannerService`, `ToolExecutorService`, and `WorkflowManager` are assembled and stored on `app.state`.
+7. `/ready` returns `ok` once startup has completed.
 
-1. API layer receives requests and validates transport-level input.
-2. Security layer validates JWT and builds a typed `RuntimeContext`.
-3. Conversation layer provides request, correlation, and conversation identifiers.
-4. Service layer constructs `RuntimeState` and orchestrates the workflow.
-5. LangGraph executes a static workflow: planner, then response generator.
-6. Model gateway client calls only the Model Gateway abstraction.
+## Chat Flow
 
-The runtime does not know about Ollama, vLLM, OpenAI, or any specific provider. That boundary stays behind the Model Gateway.
+1. Client calls `POST /chat` with `{"message": "..."}` and optionally `conversation_id`.
+2. `RequestContextMiddleware` creates or propagates:
+   - `request_id`
+   - `correlation_id`
+   - `conversation_id`
+3. Auth runs:
+   - local mode: `AI_RUNTIME_BYPASS_AUTH=true` creates a development `RuntimeContext`
+   - production mode: bearer JWT is validated using `AI_RUNTIME_JWT_SECRET` / `AI_RUNTIME_JWT_ALGORITHM`
+   - Core Gateway aliases `JWT_SECRET` and `JWT_ALGORITHM` are also accepted
+4. `ChatService` creates a `RuntimeState` with the user message, runtime context, IDs, and trace ID.
+5. `WorkflowManager` runs the LangGraph workflow.
+6. `PlannerNode` calls `ModelGatewayClient.plan()` and parses a `PlannerOutput`.
+7. `ToolExecutorNode` checks `planner_output.requires_tool`:
+   - if `false`, it returns `None`
+   - if `true`, it resolves the tool from `tool-registry`, builds MCP arguments/context, and invokes the selected MCP server
+8. `ResponseGeneratorNode` builds a grounded response prompt using the planner output and optional tool result.
+9. `ModelGatewayClient.generate()` returns the final answer.
+10. `ChatService` returns `ChatResponse` with answer plus conversation metadata.
 
-## Authentication modes
+## LangGraph Workflow
 
-### Local Development Mode
-
-Set:
-
-```env
-AI_RUNTIME_BYPASS_AUTH=true
-```
-
-Behavior:
-- JWT validation is bypassed intentionally for local development only
-- protected endpoints work from Swagger without clicking `Authorize`
-- a dummy `RuntimeContext` is created automatically
-- startup logs a warning that the service is running in local development mode
-
-### Production Mode
-
-Set:
-
-```env
-AI_RUNTIME_BYPASS_AUTH=false
-```
-
-Behavior:
-- normal JWT validation runs exactly as before
-- missing bearer token returns `401 Unauthorized`
-- valid JWT is required for protected endpoints
-
-### Local development against cloud Auth Service
-
-1. Copy `.env.example` to `.env`
-2. Set:
-
-```env
-AI_RUNTIME_BYPASS_AUTH=false
-AI_RUNTIME_JWT_SECRET=<same secret used by Auth Service or Core API Gateway JWT_SECRET>
-AI_RUNTIME_JWT_ALGORITHM=HS256
-```
-
-3. Restart the AI Runtime
-
-With that setup:
-- missing token returns `401`
-- invalid token returns `401`
-- valid JWTs signed by the existing Auth Service secret are accepted
-
-## Request flow
-
-1. `POST /chat`
-2. `RequestContextMiddleware` creates or propagates `requestId`, `correlationId`, and `conversationId`
-3. Authentication path depends on configuration:
-   - bypass enabled: local development `RuntimeContext` is created
-   - bypass disabled: JWT bearer token is validated using `AI_RUNTIME_JWT_SECRET`/`AI_RUNTIME_JWT_ALGORITHM`; runtime also accepts Core Gateway-compatible aliases `JWT_SECRET`/`JWT_ALGORITHM`
-4. `RuntimeContext` is attached to the request
-5. `ChatService` builds `RuntimeState`
-6. `WorkflowManager` runs the static LangGraph workflow
-7. `PlannerNode` generates `PlannerOutput` and `executionPlan=[]`
-8. `ResponseGeneratorNode` builds the response prompt and calls `ModelGatewayClient`
-9. Final response is returned with conversation metadata
-
-## LangGraph workflow
-
-The workflow is intentionally static:
+The workflow is static:
 
 - `START`
-- `Planner`
-- `Response Generator`
+- `planner`
+- `tool_executor`
+- `response_generator`
 - `END`
 
-Dynamic behavior belongs only in planner output metadata. The planner can mark `requires_tool=true`, but no tool execution happens in Phase 1.
+Dynamic behavior lives in planner output. Tool execution is skipped for non-tool intents but remains in the graph so the response generator always receives the same state shape.
+
+## MCP Config
+
+The canonical default MCP server file is:
+
+```text
+app/mcp_client/config/servers.yaml
+```
+
+`Settings.mcp_servers_config_path` points there by default. Override it only when needed:
+
+```env
+AI_RUNTIME_MCP_SERVERS_CONFIG_PATH=/path/to/servers.yaml
+```
+
+The server names in `servers.yaml` must match the `server` field in tool registry YAML files. For example, `tool-registry/vidhya/academic.yaml` uses `vidhya-mcp`, so the MCP config must contain a `vidhya-mcp` server entry.
 
 ## RuntimeState
 
-`RuntimeState` is the single communication object shared by all graph nodes.
+`RuntimeState` is the shared graph object.
 
 It contains:
 - `conversation_id`
@@ -145,30 +118,12 @@ It contains:
 - `runtime_context`
 - `user_question`
 - `planner_output`
-- `execution_plan`
+- `tool_execution_result`
 - `model_response`
 - `final_response`
 - `trace_id`
 
-This keeps node communication explicit and prepares the runtime for later MCP integration without changing the graph contract.
-
-## Future extension points
-
-- `execution_plan` can be consumed later by an MCP client without changing the current workflow shape.
-- `model_gateway/` is isolated so LiteLLM or other downstream orchestration can be introduced without changing runtime business logic.
-- `conversation/` can later support richer session policies without spreading context logic across middleware and services.
-- `graph/nodes/` allows additional internal node refactors later while preserving the same top-level workflow.
-
-## Reuse from Core API Gateway
-
-The runtime intentionally mirrors these gateway decisions without editing the gateway project:
-- shared-secret JWT validation pattern
-- environment-driven configuration
-- health/readiness style
-
-The runtime improves on that baseline by introducing typed runtime context, centralized errors, separated graph nodes, conversation context abstractions, and domain-based models.
-
-## Run locally
+## Run Locally
 
 ```bash
 python -m venv .venv
@@ -182,4 +137,3 @@ uvicorn app.main:app --reload
 ```bash
 pytest
 ```
-
