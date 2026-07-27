@@ -1,4 +1,4 @@
-﻿import logging
+import logging
 import uuid
 from typing import Any
 
@@ -149,19 +149,20 @@ class RuntimeContextFactory:
         )
 
     @staticmethod
-    def for_local_development() -> RuntimeContext:
+    def for_local_development(settings: Settings | None = None) -> RuntimeContext:
+        settings = settings or get_settings()
         return RuntimeContext(
-            subject='developer',
-            user_id='developer',
-            organization_id='yntec',
-            branch_id='main',
-            app_id='vidhya',
-            tenant_id='yn',
-            locale='en-IN',
-            application_ids=['hrms', 'vidhya'],
-            roles=['SUPER_ADMIN'],
-            permissions=['*'],
-            session_id='local-session',
+            subject=settings.local_subject,
+            user_id=settings.local_user_id,
+            organization_id=settings.local_organization_id,
+            branch_id=settings.local_branch_id,
+            app_id=settings.local_app_id,
+            tenant_id=settings.local_tenant_id,
+            locale=settings.local_locale,
+            application_ids=settings.local_application_ids,
+            roles=settings.local_roles,
+            permissions=settings.local_permissions,
+            session_id=settings.local_session_id,
             jwt='local-development-token',
             raw_claims={'mode': 'local-development'},
         )
@@ -169,6 +170,51 @@ class RuntimeContextFactory:
     @classmethod
     def from_request(cls, claims: dict[str, Any], token: str, request: Request) -> RuntimeContext:
         return cls._mapper.from_request(claims, token, request)
+
+
+def _build_bypass_runtime_context(
+    request: Request,
+    credentials: HTTPAuthorizationCredentials | None,
+    settings: Settings,
+) -> RuntimeContext:
+    if credentials is not None and credentials.scheme.lower() == 'bearer':
+        try:
+            claims = jwt.decode(
+                credentials.credentials,
+                options={
+                    'verify_signature': False,
+                    'verify_exp': False,
+                    'verify_aud': False,
+                    'verify_iss': False,
+                },
+            )
+            runtime_context = RuntimeContextFactory.from_request(claims, credentials.credentials, request)
+            logger.info(
+                'runtime_context_created_from_unverified_local_token user_id=%s organization_id=%s branch_id=%s app_id=%s request_id=%s correlation_id=%s trace_id=%s',
+                runtime_context.user_id,
+                runtime_context.organization_id,
+                runtime_context.branch_id,
+                runtime_context.app_id,
+                runtime_context.request_id,
+                runtime_context.correlation_id,
+                runtime_context.trace_id,
+            )
+            return runtime_context
+        except (jwt.InvalidTokenError, UnauthorizedError) as exc:
+            logger.warning(
+                'local_bypass_token_claim_extraction_failed request_id=%s correlation_id=%s reason=%s',
+                getattr(request.state, 'request_id', None),
+                getattr(request.state, 'correlation_id', None),
+                exc,
+            )
+
+    return RuntimeContextFactory.for_local_development(settings).model_copy(
+        update={
+            'request_id': getattr(request.state, 'request_id', None),
+            'correlation_id': getattr(request.state, 'correlation_id', None),
+            'trace_id': request.headers.get('X-Trace-Id') or str(uuid.uuid4()),
+        }
+    )
 
 
 def get_jwt_service(settings: Settings = Depends(get_settings)) -> JwtService:
@@ -186,13 +232,7 @@ async def get_runtime_context(
         return existing_context
 
     if settings.bypass_auth:
-        runtime_context = RuntimeContextFactory.for_local_development().model_copy(
-            update={
-                'request_id': getattr(request.state, 'request_id', None),
-                'correlation_id': getattr(request.state, 'correlation_id', None),
-                'trace_id': request.headers.get('X-Trace-Id') or str(uuid.uuid4()),
-            }
-        )
+        runtime_context = _build_bypass_runtime_context(request, credentials, settings)
         request.state.runtime_context = runtime_context
         request.state.conversation_context = ConversationContextStore.get()
         return runtime_context

@@ -1,4 +1,4 @@
-﻿from __future__ import annotations
+from __future__ import annotations
 
 import logging
 from time import perf_counter
@@ -153,7 +153,7 @@ class ToolExecutorService:
             'trace_id': trace_id,
         }
         return arguments
-
+
     @staticmethod
     def _build_context(
         runtime_context: RuntimeContext,

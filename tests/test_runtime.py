@@ -1,4 +1,4 @@
-﻿import os
+import os
 import tempfile
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
@@ -214,6 +214,47 @@ def test_chat_service_flow_with_bypass_enabled():
     assert body['answer'] == 'stubbed response'
     assert body['metadata']['trace_id']
 
+
+
+def test_bypass_auth_uses_bearer_token_claims(token: str):
+    from app.security.auth import _build_bypass_runtime_context
+    from starlette.requests import Request
+
+    scope = {
+        'type': 'http',
+        'method': 'POST',
+        'path': '/chat',
+        'headers': [],
+    }
+    request = Request(scope)
+    request.state.request_id = 'req-1'
+    request.state.correlation_id = 'corr-1'
+    credentials = type('Credentials', (), {'scheme': 'Bearer', 'credentials': token})()
+    settings = type(
+        'S',
+        (),
+        {
+            'local_subject': 'developer',
+            'local_user_id': 'developer',
+            'local_organization_id': 'yntec',
+            'local_branch_id': 'main',
+            'local_app_id': 'vidhya',
+            'local_tenant_id': 'yn',
+            'local_locale': 'en-IN',
+            'local_session_id': 'local-session',
+            'local_application_ids': ['hrms', 'vidhya'],
+            'local_roles': ['SUPER_ADMIN'],
+            'local_permissions': ['*'],
+        },
+    )()
+
+    context = _build_bypass_runtime_context(request, credentials, settings)
+
+    assert context.user_id == 'user-1'
+    assert context.organization_id == 'org-1'
+    assert context.branch_id == 'branch-1'
+    assert context.session_id == 'session-1'
+    assert context.jwt == token
 
 def test_chat_requires_auth_when_bypass_disabled():
     with create_test_client(bypass_auth=False) as client:
@@ -481,3 +522,24 @@ def test_settings_accepts_core_gateway_jwt_secret_alias(monkeypatch):
     settings = Settings()
     assert settings.jwt_secret == TEST_SECRET
 
+
+def test_tool_executor_keeps_identity_values_inside_context_only():
+    from app.models.runtime import RuntimeContext
+    from app.tool_executor.service import ToolExecutorService
+
+    context = RuntimeContext(
+        subject='user-1',
+        user_id='user-1',
+        organization_id='org-1',
+        branch_id='branch-1',
+        app_id='vidhya',
+        tenant_id='tenant-1',
+        locale='en-IN',
+    )
+
+    arguments = ToolExecutorService._build_arguments({}, context, 'req-1', 'corr-1', 'trace-1')
+
+    assert 'branch_id' not in arguments
+    assert arguments['context']['branch_id'] == 'branch-1'
+    assert arguments['context']['organization_id'] == 'org-1'
+    assert arguments['context']['user_id'] == 'user-1'

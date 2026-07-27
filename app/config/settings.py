@@ -1,4 +1,4 @@
-﻿from functools import lru_cache
+from functools import lru_cache
 from pathlib import Path
 from typing import Literal
 
@@ -21,6 +21,17 @@ class Settings(BaseSettings):
     port: int = 8000
     debug: bool = False
     bypass_auth: bool = False
+    local_subject: str = 'developer'
+    local_user_id: str = 'developer'
+    local_organization_id: str = 'yntec'
+    local_branch_id: str = 'main'
+    local_app_id: str = 'vidhya'
+    local_tenant_id: str = 'yn'
+    local_locale: str = 'en-IN'
+    local_session_id: str = 'local-session'
+    local_application_ids: list[str] = Field(default_factory=lambda: ['hrms', 'vidhya'])
+    local_roles: list[str] = Field(default_factory=lambda: ['SUPER_ADMIN'])
+    local_permissions: list[str] = Field(default_factory=lambda: ['*'])
 
     jwt_secret: str = Field(default='', validation_alias=AliasChoices('JWT_SECRET', 'AI_RUNTIME_JWT_SECRET'))
     jwt_algorithm: str = Field(default='HS256', validation_alias=AliasChoices('JWT_ALGORITHM', 'AI_RUNTIME_JWT_ALGORITHM'))
