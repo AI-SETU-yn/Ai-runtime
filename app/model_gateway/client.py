@@ -44,6 +44,7 @@ class ModelGatewayClient:
             max_retries=settings.model_gateway_max_retries,
         )
         self._adapter = settings.model_gateway_adapter
+        self._send_planner_prompt = getattr(settings, 'model_gateway_send_planner_prompt', False)
 
     async def generate(self, prompt: str, *, metadata: dict[str, Any] | None = None) -> str:
         payload = {
@@ -58,7 +59,7 @@ class ModelGatewayClient:
             'adapter': self._adapter,
             'query': query,
         }
-        if prompt:
+        if prompt and self._send_planner_prompt:
             payload['prompt'] = prompt
         return await self._post(self._planner_config, payload, operation='planner')
 

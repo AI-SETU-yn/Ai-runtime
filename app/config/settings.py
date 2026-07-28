@@ -43,6 +43,7 @@ class Settings(BaseSettings):
     model_gateway_timeout_seconds: float = 30.0
     model_gateway_connect_timeout_seconds: float = 5.0
     model_gateway_read_timeout_seconds: float = 30.0
+    model_gateway_send_planner_prompt: bool = False
     model_gateway_planner_timeout_seconds: float = Field(
         default=30.0,
         validation_alias=AliasChoices(

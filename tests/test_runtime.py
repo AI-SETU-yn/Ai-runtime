@@ -1234,7 +1234,7 @@ def test_model_gateway_client_request_contract():
 
         import asyncio
         result = asyncio.run(client.generate('hello prompt', metadata={'trace_id': 't1'}))
-        planner_result = asyncio.run(client.plan('show subjects'))
+        planner_result = asyncio.run(client.plan('show subjects', prompt='registry prompt'))
     finally:
         mg_client_module.httpx.AsyncClient = original_client
 
@@ -1247,6 +1247,60 @@ def test_model_gateway_client_request_contract():
     assert captured[1]['json'] == {'adapter': 'academic', 'query': 'show subjects'}
     assert captured_timeouts[0].read == 90.0
     assert captured_timeouts[1].read == 30.0
+
+
+def test_model_gateway_client_can_opt_into_planner_prompt_forwarding():
+    captured = []
+
+    class DummyResponse:
+        def raise_for_status(self):
+            return None
+
+        def json(self):
+            return {'intent': 'general.chat', 'requiresTool': False}
+
+    class DummyClient:
+        def __init__(self, *args, **kwargs):
+            pass
+
+        async def __aenter__(self):
+            return self
+
+        async def __aexit__(self, exc_type, exc, tb):
+            return False
+
+        async def post(self, url, json):
+            captured.append(json)
+            return DummyResponse()
+
+    import app.model_gateway.client as mg_client_module
+
+    original_client = mg_client_module.httpx.AsyncClient
+    mg_client_module.httpx.AsyncClient = DummyClient
+    try:
+        settings = type(
+            'Settings',
+            (),
+            {
+                'model_gateway_url': 'http://localhost:9000',
+                'model_gateway_chat_path': '/generate',
+                'model_gateway_planner_path': '/planner',
+                'model_gateway_adapter': 'academic',
+                'model_gateway_timeout_seconds': 30.0,
+                'model_gateway_connect_timeout_seconds': 5.0,
+                'model_gateway_read_timeout_seconds': 30.0,
+                'model_gateway_max_retries': 0,
+                'model_gateway_send_planner_prompt': True,
+            },
+        )()
+        client = ModelGatewayClient(settings)
+
+        import asyncio
+        asyncio.run(client.plan('show subjects', prompt='registry prompt'))
+    finally:
+        mg_client_module.httpx.AsyncClient = original_client
+
+    assert captured == [{'adapter': 'academic', 'query': 'show subjects', 'prompt': 'registry prompt'}]
 
 
 @pytest.mark.asyncio
@@ -1604,6 +1658,7 @@ def test_settings_accepts_model_gateway_operation_timeout_overrides(monkeypatch)
     monkeypatch.setenv('AI_RUNTIME_MODEL_GATEWAY_PLANNER_READ_TIMEOUT_SECONDS', '32')
     monkeypatch.setenv('AI_RUNTIME_MODEL_GATEWAY_GENERATE_TIMEOUT_SECONDS', '91')
     monkeypatch.setenv('AI_RUNTIME_MODEL_GATEWAY_GENERATE_READ_TIMEOUT_SECONDS', '92')
+    monkeypatch.setenv('AI_RUNTIME_MODEL_GATEWAY_SEND_PLANNER_PROMPT', 'true')
 
     settings = Settings()
 
@@ -1611,6 +1666,7 @@ def test_settings_accepts_model_gateway_operation_timeout_overrides(monkeypatch)
     assert settings.model_gateway_planner_read_timeout_seconds == 32
     assert settings.model_gateway_generate_timeout_seconds == 91
     assert settings.model_gateway_generate_read_timeout_seconds == 92
+    assert settings.model_gateway_send_planner_prompt is True
 
 
 def test_tool_executor_keeps_identity_values_inside_context_only():
