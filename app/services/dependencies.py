@@ -1,7 +1,8 @@
-﻿from fastapi import Depends
+from fastapi import Depends
 
 from app.config.settings import Settings, get_settings
 from app.graph.graph import WorkflowManager
+from app.guardrails import GuardrailEngine, GuardrailsLoader
 from app.mcp_client import MCPClient
 from app.mcp_client.client.manager import MCPClientManager
 from app.mcp_client.connection.pool import ConnectionPool
@@ -21,6 +22,7 @@ from app.tool_registry.service import ToolRegistryService
 _tool_registry_repository = ToolRegistryRepository()
 _tool_registry_service = ToolRegistryService(_tool_registry_repository)
 _mcp_client: MCPClient | None = None
+_guardrail_engine: GuardrailEngine | None = None
 
 
 def get_prompt_builder() -> PromptBuilder:
@@ -41,6 +43,14 @@ def get_model_gateway_client(settings: Settings = Depends(get_settings)) -> Mode
 
 def get_tool_registry_service() -> ToolRegistryService:
     return _tool_registry_service
+
+
+def get_guardrail_engine(settings: Settings = Depends(get_settings)) -> GuardrailEngine:
+    global _guardrail_engine
+    if _guardrail_engine is None:
+        config = GuardrailsLoader().load(settings.guardrails_config_path)
+        _guardrail_engine = GuardrailEngine(config)
+    return _guardrail_engine
 
 
 def get_planner_service(
@@ -97,5 +107,8 @@ def get_workflow_manager(
     return WorkflowManager(planner_service, model_gateway_client, tool_executor_service)
 
 
-def get_chat_service(workflow_manager: WorkflowManager = Depends(get_workflow_manager)) -> ChatService:
-    return ChatService(workflow_manager)
+def get_chat_service(
+    workflow_manager: WorkflowManager = Depends(get_workflow_manager),
+    guardrail_engine: GuardrailEngine = Depends(get_guardrail_engine),
+) -> ChatService:
+    return ChatService(workflow_manager, guardrail_engine)
