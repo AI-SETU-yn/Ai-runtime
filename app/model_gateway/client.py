@@ -15,48 +15,78 @@ logger = logging.getLogger(__name__)
 
 class ModelGatewayClient:
     def __init__(self, settings: Settings) -> None:
-        self._config = ModelGatewayRequestConfig(
+        self._generate_config = ModelGatewayRequestConfig(
             url=settings.model_gateway_url,
             path=settings.model_gateway_chat_path,
-            timeout_seconds=settings.model_gateway_timeout_seconds,
-            connect_timeout_seconds=settings.model_gateway_connect_timeout_seconds,
-            read_timeout_seconds=settings.model_gateway_read_timeout_seconds,
+            timeout_seconds=getattr(settings, 'model_gateway_generate_timeout_seconds', 90.0),
+            connect_timeout_seconds=getattr(settings, 'model_gateway_generate_connect_timeout_seconds', 5.0),
+            read_timeout_seconds=getattr(settings, 'model_gateway_generate_read_timeout_seconds', 90.0),
             max_retries=settings.model_gateway_max_retries,
         )
-        self._planner_path = settings.model_gateway_planner_path
-        self._adapter = settings.model_gateway_adapter
-        self._timeout = httpx.Timeout(
-            timeout=self._config.timeout_seconds,
-            connect=self._config.connect_timeout_seconds,
-            read=self._config.read_timeout_seconds,
+        self._planner_config = ModelGatewayRequestConfig(
+            url=settings.model_gateway_url,
+            path=settings.model_gateway_planner_path,
+            timeout_seconds=getattr(
+                settings,
+                'model_gateway_planner_timeout_seconds',
+                settings.model_gateway_timeout_seconds,
+            ),
+            connect_timeout_seconds=getattr(
+                settings,
+                'model_gateway_planner_connect_timeout_seconds',
+                settings.model_gateway_connect_timeout_seconds,
+            ),
+            read_timeout_seconds=getattr(
+                settings,
+                'model_gateway_planner_read_timeout_seconds',
+                settings.model_gateway_read_timeout_seconds,
+            ),
+            max_retries=settings.model_gateway_max_retries,
         )
+        self._adapter = settings.model_gateway_adapter
 
     async def generate(self, prompt: str, *, metadata: dict[str, Any] | None = None) -> str:
         payload = {
             'adapter': self._adapter,
             'prompt': prompt,
         }
-        body = await self._post(self._config.path, payload, operation='generate')
+        body = await self._post(self._generate_config, payload, operation='generate')
         return str(body.get('response') or body.get('answer') or body.get('content') or '')
 
-    async def plan(self, query: str) -> dict[str, Any]:
+    async def plan(self, query: str, *, prompt: str | None = None) -> dict[str, Any]:
         payload = {
             'adapter': self._adapter,
             'query': query,
         }
-        return await self._post(self._planner_path, payload, operation='planner')
+        if prompt:
+            payload['prompt'] = prompt
+        return await self._post(self._planner_config, payload, operation='planner')
 
-    async def _post(self, path: str, payload: dict[str, Any], *, operation: str) -> dict[str, Any]:
+    async def _post(
+        self,
+        config: ModelGatewayRequestConfig,
+        payload: dict[str, Any],
+        *,
+        operation: str,
+    ) -> dict[str, Any]:
         if not self._adapter:
             raise ModelGatewayError('Model gateway adapter is not configured.')
         last_error: Exception | None = None
-        logger.info('model_gateway_%s_request_json\n%s', operation, pretty_json({'url': f"{self._config.url.rstrip('/')}{path}", 'payload': payload, 'timeout_seconds': self._config.timeout_seconds}))
-        for attempt in range(self._config.max_retries + 1):
+        url = f"{config.url.rstrip('/')}{config.path}"
+        timeout = self._timeout_from_config(config)
+        logger.info('model_gateway_%s_request_json\n%s', operation, pretty_json({
+            'url': url,
+            'payload': payload,
+            'timeout_seconds': config.timeout_seconds,
+            'connect_timeout_seconds': config.connect_timeout_seconds,
+            'read_timeout_seconds': config.read_timeout_seconds,
+        }))
+        for attempt in range(config.max_retries + 1):
             started = perf_counter()
             try:
-                async with httpx.AsyncClient(timeout=self._timeout) as client:
+                async with httpx.AsyncClient(timeout=timeout) as client:
                     response = await client.post(
-                        f"{self._config.url.rstrip('/')}{path}",
+                        url,
                         json=payload,
                     )
                 response.raise_for_status()
@@ -67,12 +97,36 @@ class ModelGatewayClient:
                 return body
             except httpx.TimeoutException as exc:
                 last_error = exc
-                logger.warning('model_gateway_timeout operation=%s attempt=%s', operation, attempt + 1)
+                elapsed_ms = round((perf_counter() - started) * 1000, 2)
+                logger.warning(
+                    'model_gateway_timeout operation=%s attempt=%s url=%s timeout_seconds=%s elapsed_ms=%s',
+                    operation,
+                    attempt + 1,
+                    url,
+                    config.timeout_seconds,
+                    elapsed_ms,
+                )
             except (httpx.HTTPError, ValueError) as exc:
                 last_error = exc
-                logger.warning('model_gateway_failure operation=%s attempt=%s error=%s', operation, attempt + 1, str(exc))
-            if attempt < self._config.max_retries:
+                latency_ms = round((perf_counter() - started) * 1000, 2)
+                logger.warning(
+                    'model_gateway_failure operation=%s attempt=%s url=%s elapsed_ms=%s error=%s',
+                    operation,
+                    attempt + 1,
+                    url,
+                    latency_ms,
+                    str(exc),
+                )
+            if attempt < config.max_retries:
                 await asyncio.sleep(0.2 * (attempt + 1))
         if isinstance(last_error, httpx.TimeoutException):
             raise ModelGatewayTimeoutError('Model gateway request timed out.') from last_error
         raise ModelGatewayError('Model gateway request failed.') from last_error
+
+    @staticmethod
+    def _timeout_from_config(config: ModelGatewayRequestConfig) -> httpx.Timeout:
+        return httpx.Timeout(
+            timeout=config.timeout_seconds,
+            connect=config.connect_timeout_seconds,
+            read=config.read_timeout_seconds,
+        )

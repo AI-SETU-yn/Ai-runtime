@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from enum import StrEnum
 
-from pydantic import BaseModel, ConfigDict, Field, model_validator
+from pydantic import AliasChoices, BaseModel, ConfigDict, Field, model_validator
 
 
 class Operation(StrEnum):
@@ -60,6 +60,38 @@ class OutputDefinition(BaseModel):
     type: str
 
 
+class ToolReferenceDefinition(BaseModel):
+    """Registry reference to another tool that can provide dependency data."""
+
+    model_config = ConfigDict(extra='forbid', frozen=True, populate_by_name=True)
+
+    domain: str | None = None
+    service: str | None = None
+    entity: str | None = None
+    operation: str | None = None
+    tool: str | None = None
+
+
+class ParameterDependencyDefinition(BaseModel):
+    """Declarative binding from a required parameter to another tool's output."""
+
+    model_config = ConfigDict(extra='forbid', frozen=True, populate_by_name=True)
+
+    parameter: str
+    source: ToolReferenceDefinition
+    path: str = Field(validation_alias=AliasChoices('path', 'binding_path', 'bindingPath'))
+
+    @model_validator(mode='after')
+    def validate_dependency(self) -> 'ParameterDependencyDefinition':
+        if not self.parameter.strip():
+            raise ValueError('parameter must not be empty')
+        if not self.path.strip():
+            raise ValueError('path must not be empty')
+        if not any((self.source.tool, self.source.entity, self.source.operation)):
+            raise ValueError('source must include tool or entity/operation')
+        return self
+
+
 class ToolDefinition(BaseModel):
     """Represents a single executable tool entry from the registry.
 
@@ -89,6 +121,7 @@ class ToolDefinition(BaseModel):
     capability: str
     required_parameters: list[str] = Field(default_factory=list)
     optional_parameters: list[str] = Field(default_factory=list)
+    parameter_dependencies: list[ParameterDependencyDefinition] = Field(default_factory=list)
     response_type: ResponseType
     version: str
     status: ToolStatus

@@ -571,14 +571,20 @@ tools:
   description: Fetches holidays for an academic year.
   capability: academic.holiday.list
   required_parameters:
-  - academicYear
+  - academic_year_id
   optional_parameters: []
+  parameter_dependencies:
+  - parameter: academic_year_id
+    source:
+      entity: academic_year
+      operation: list
+    path: $.data[?(@.isCurrentAcademicYear==true)].referenceId
   response_type: document
   version: 1.0.0
   status: active
   input:
     schema_summary:
-      academicYear: str
+      academic_year_id: str
       context: VidhyaRequestContext
   output:
     type: json

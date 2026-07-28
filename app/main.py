@@ -19,6 +19,7 @@ from app.model_gateway.client import ModelGatewayClient
 from app.planner.parser import PlannerOutputParser
 from app.planner.planner import PlannerService
 from app.planner.prompts import PlannerPromptProvider
+from app.planner.registry_validator import PlannerRegistryValidator
 from app.prompts.builder import PromptBuilder
 from app.services.dependencies import get_mcp_client, get_tool_registry_service
 from app.tool_executor.service import ToolExecutorService
@@ -40,6 +41,10 @@ async def lifespan(app: FastAPI):
             'model_gateway_url': settings.model_gateway_url,
             'planner_path': settings.model_gateway_planner_path,
             'generate_path': settings.model_gateway_chat_path,
+            'planner_timeout_seconds': settings.model_gateway_planner_timeout_seconds,
+            'planner_read_timeout_seconds': settings.model_gateway_planner_read_timeout_seconds,
+            'generate_timeout_seconds': settings.model_gateway_generate_timeout_seconds,
+            'generate_read_timeout_seconds': settings.model_gateway_generate_read_timeout_seconds,
             'adapter': settings.model_gateway_adapter,
         },
     )
@@ -71,6 +76,7 @@ async def lifespan(app: FastAPI):
         PlannerPromptProvider(),
         PlannerOutputParser(),
         model_gateway_client,
+        PlannerRegistryValidator(tool_registry_service),
     )
     tool_executor_service = ToolExecutorService(tool_registry_service, mcp_client)
     workflow_manager = WorkflowManager(planner_service, model_gateway_client, tool_executor_service)

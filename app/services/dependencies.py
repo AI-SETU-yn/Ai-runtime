@@ -11,6 +11,7 @@ from app.model_gateway.client import ModelGatewayClient
 from app.planner.parser import PlannerOutputParser
 from app.planner.planner import PlannerService
 from app.planner.prompts import PlannerPromptProvider
+from app.planner.registry_validator import PlannerRegistryValidator
 from app.prompts.builder import PromptBuilder
 from app.services.chat_service import ChatService
 from app.tool_executor.service import ToolExecutorService
@@ -38,13 +39,24 @@ def get_model_gateway_client(settings: Settings = Depends(get_settings)) -> Mode
     return ModelGatewayClient(settings)
 
 
+def get_tool_registry_service() -> ToolRegistryService:
+    return _tool_registry_service
+
+
 def get_planner_service(
     prompt_builder: PromptBuilder = Depends(get_prompt_builder),
     prompt_provider: PlannerPromptProvider = Depends(get_planner_prompt_provider),
     output_parser: PlannerOutputParser = Depends(get_planner_output_parser),
     model_gateway_client: ModelGatewayClient = Depends(get_model_gateway_client),
+    tool_registry_service: ToolRegistryService = Depends(get_tool_registry_service),
 ) -> PlannerService:
-    return PlannerService(prompt_builder, prompt_provider, output_parser, model_gateway_client)
+    return PlannerService(
+        prompt_builder,
+        prompt_provider,
+        output_parser,
+        model_gateway_client,
+        PlannerRegistryValidator(tool_registry_service),
+    )
 
 
 def build_mcp_client(settings: Settings) -> MCPClient:
@@ -68,10 +80,6 @@ def get_mcp_client(settings: Settings = Depends(get_settings)) -> MCPClient:
             client.register_server(server)
         _mcp_client = client
     return _mcp_client
-
-
-def get_tool_registry_service() -> ToolRegistryService:
-    return _tool_registry_service
 
 
 def get_tool_executor_service(

@@ -43,6 +43,30 @@ class Settings(BaseSettings):
     model_gateway_timeout_seconds: float = 30.0
     model_gateway_connect_timeout_seconds: float = 5.0
     model_gateway_read_timeout_seconds: float = 30.0
+    model_gateway_planner_timeout_seconds: float = Field(
+        default=30.0,
+        validation_alias=AliasChoices(
+            'AI_RUNTIME_MODEL_GATEWAY_PLANNER_TIMEOUT_SECONDS',
+            'AI_RUNTIME_MODEL_GATEWAY_TIMEOUT_SECONDS',
+        ),
+    )
+    model_gateway_planner_connect_timeout_seconds: float = Field(
+        default=5.0,
+        validation_alias=AliasChoices(
+            'AI_RUNTIME_MODEL_GATEWAY_PLANNER_CONNECT_TIMEOUT_SECONDS',
+            'AI_RUNTIME_MODEL_GATEWAY_CONNECT_TIMEOUT_SECONDS',
+        ),
+    )
+    model_gateway_planner_read_timeout_seconds: float = Field(
+        default=30.0,
+        validation_alias=AliasChoices(
+            'AI_RUNTIME_MODEL_GATEWAY_PLANNER_READ_TIMEOUT_SECONDS',
+            'AI_RUNTIME_MODEL_GATEWAY_READ_TIMEOUT_SECONDS',
+        ),
+    )
+    model_gateway_generate_timeout_seconds: float = 90.0
+    model_gateway_generate_connect_timeout_seconds: float = 5.0
+    model_gateway_generate_read_timeout_seconds: float = 90.0
     model_gateway_max_retries: int = 2
 
     mcp_servers_config_path: Path = Path('app/mcp_client/config/servers.yaml')
