@@ -207,6 +207,9 @@ def create_test_client(*, bypass_auth: bool):
     os.environ['AI_RUNTIME_TOOL_REGISTRY_PATH'] = create_test_registry()
     os.environ['AI_RUNTIME_MCP_SERVERS_CONFIG_PATH'] = create_test_mcp_servers()
     os.environ['AI_RUNTIME_MODEL_GATEWAY_ADAPTER'] = 'academic'
+    os.environ['AI_RUNTIME_GUARDRAILS_CONFIG_PATH'] = str(
+        Path(__file__).resolve().parents[1] / 'app' / 'config' / 'guardrails.yaml'
+    )
     get_settings.cache_clear()
     app = create_app()
     app.dependency_overrides[get_model_gateway_client] = lambda: StubModelGatewayClient()

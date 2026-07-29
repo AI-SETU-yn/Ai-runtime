@@ -1,0 +1,80 @@
+input:
+  rules:
+    - id: input.max_length
+      description: Blocks unusually large prompts that can degrade quality or exhaust runtime capacity.
+      enabled: true
+      type: max_length
+      action: block
+      target: message
+      max_length: 4000
+      message: Input exceeds the maximum allowed length.
+      tags:
+        - availability
+        - abuse-prevention
+    - id: input.prompt_injection
+      description: Blocks common prompt-injection and instruction-override attempts.
+      enabled: true
+      type: regex
+      action: block
+      target: message
+      patterns:
+        - '(?i)ignore\s+(all|previous|prior)\s+(instructions|rules|prompts)'
+        - '(?i)disregard\s+(all|previous|prior)\s+(instructions|rules|prompts)'
+        - '(?i)reveal\s+(the\s+)?(system prompt|hidden instructions|developer prompt)'
+        - '(?i)bypass\s+(security|guardrails|safety)'
+      message: Request blocked by input security policy.
+      tags:
+        - prompt-injection
+        - security
+    - id: input.secret_exfiltration
+      description: Blocks requests that explicitly ask for credentials, tokens, or secrets.
+      enabled: true
+      type: regex
+      action: block
+      target: message
+      patterns:
+        - '(?i)(api[_ -]?key|access[_ -]?token|refresh[_ -]?token|private[_ -]?key|secret)'
+      message: Request blocked by sensitive-data protection policy.
+      tags:
+        - secret-protection
+        - data-loss-prevention
+output:
+  rules:
+    - id: output.authorization_redaction
+      description: Redacts bearer tokens from generated responses.
+      enabled: true
+      type: regex
+      action: redact
+      target: answer
+      patterns:
+        - '(?i)bearer\s+[a-z0-9\-._~+/]+=*'
+      replacement: '[redacted-token]'
+      tags:
+        - credentials
+        - redaction
+    - id: output.email_redaction
+      description: Redacts email addresses from generated responses when present.
+      enabled: true
+      type: regex
+      action: redact
+      target: answer
+      patterns:
+        - '\b[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}\b'
+      flags:
+        - IGNORECASE
+      replacement: '[redacted-email]'
+      tags:
+        - pii
+        - redaction
+    - id: output.phone_redaction
+      description: Redacts phone-number like sequences from generated responses.
+      enabled: true
+      type: regex
+      action: redact
+      target: answer
+      patterns:
+        - '(?<!\d)(?:\+?\d[\d\s().-]{7,}\d)(?!\d)'
+      replacement: '[redacted-phone]'
+      tags:
+        - pii
+        - redaction

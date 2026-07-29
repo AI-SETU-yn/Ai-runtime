@@ -1,4 +1,4 @@
-﻿import logging
+import logging
 from contextlib import asynccontextmanager
 
 from fastapi import FastAPI
@@ -21,7 +21,7 @@ from app.planner.planner import PlannerService
 from app.planner.prompts import PlannerPromptProvider
 from app.planner.registry_validator import PlannerRegistryValidator
 from app.prompts.builder import PromptBuilder
-from app.services.dependencies import get_mcp_client, get_tool_registry_service
+from app.services.dependencies import get_guardrail_engine, get_mcp_client, get_tool_registry_service
 from app.tool_executor.service import ToolExecutorService
 from app.utils.logging import configure_logging
 
@@ -63,10 +63,12 @@ async def lifespan(app: FastAPI):
 
     mcp_client = get_mcp_client(settings)
     app.state.mcp_client = mcp_client
+    app.state.guardrail_engine = get_guardrail_engine(settings)
     logger.info(
         'mcp_client_initialized',
         extra={
             'mcp_servers_config_path': str(settings.mcp_servers_config_path),
+            'guardrails_config_path': str(settings.guardrails_config_path),
         },
     )
 

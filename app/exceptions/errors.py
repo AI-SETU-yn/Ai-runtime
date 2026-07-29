@@ -1,4 +1,4 @@
-﻿class AppException(Exception):
+class AppException(Exception):
     status_code = 500
     code = 'INTERNAL_ERROR'
 
@@ -34,3 +34,21 @@ class ModelGatewayError(AppException):
 class ModelGatewayTimeoutError(ModelGatewayError):
     status_code = 504
     code = 'MODEL_GATEWAY_TIMEOUT'
+
+
+class GuardrailViolationError(AppException):
+    status_code = 422
+    code = 'GUARDRAIL_VIOLATION'
+
+    def __init__(
+        self,
+        message: str,
+        *,
+        stage: str,
+        rule_id: str,
+        tags: list[str] | None = None,
+    ) -> None:
+        super().__init__(message)
+        self.stage = stage
+        self.rule_id = rule_id
+        self.tags = tags or []

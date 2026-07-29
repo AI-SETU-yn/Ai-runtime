@@ -82,6 +82,7 @@ class Settings(BaseSettings):
     log_level: str = 'INFO'
     ready_on_startup: bool = True
     tool_registry_path: Path = Path('tool-registry')
+    guardrails_config_path: Path = Path('app/config/guardrails.yaml')
 
 
 @lru_cache(maxsize=1)
