@@ -652,6 +652,90 @@ async def test_planner_and_executor_run_dependency_plan_end_to_end():
 
 
 @pytest.mark.asyncio
+async def test_workflow_manager_runs_general_agent_loop_and_records_observation():
+    from app.agent.models import AgentDecisionAction, AgentState, AgentStatus
+    from app.graph.graph import WorkflowManager
+    from app.graph.state import RuntimeState
+    from app.mcp_client.models.response import InvocationStatus, ToolResponse
+    from app.models.runtime import RuntimeContext
+    from app.tool_executor.service import ToolExecutorService
+
+    registry_service, validator = create_planner_registry_service()
+    planner = PlannerService(
+        PromptBuilder(),
+        PlannerPromptProvider(),
+        PlannerOutputParser(),
+        StaticPlannerGateway(
+            {
+                'intent': 'academic.academic_year.list',
+                'domain': 'vidhya',
+                'service': 'academic',
+                'entity': 'academic_year',
+                'operation': 'list',
+                'parameters': {},
+                'requiresTool': True,
+                'adapter': 'academic',
+            }
+        ),
+        validator,
+    )
+    calls = []
+
+    class FakeMCPClient:
+        async def invoke_tool(self, server, tool_name, arguments, *, context, trace_id, request_id):
+            calls.append({'server': server, 'tool_name': tool_name, 'arguments': arguments})
+            return ToolResponse(
+                success=True,
+                status=InvocationStatus.SUCCESS,
+                execution_time=0.1,
+                tool_results={
+                    'content': [
+                        {
+                            'type': 'text',
+                            'text': '{"data":[{"referenceId":"year-current","academicYear":"2024-2025"}]}',
+                        }
+                    ]
+                },
+            )
+
+    class FakeGenerateGateway:
+        async def generate(self, prompt: str, *, metadata=None) -> str:
+            return 'Academic years: 2024-2025'
+
+    workflow = WorkflowManager(
+        planner,
+        FakeGenerateGateway(),
+        ToolExecutorService(registry_service, FakeMCPClient()),
+        registry_service,
+    )
+    final_state = await workflow.run(
+        RuntimeState(
+            conversation_id='conv-1',
+            request_id='req-1',
+            correlation_id='corr-1',
+            runtime_context=RuntimeContext(
+                subject='user-1',
+                user_id='user-1',
+                organization_id='org-1',
+                branch_id='branch-1',
+            ),
+            user_question='Show all academic years',
+            trace_id='trace-1',
+        )
+    )
+
+    assert isinstance(final_state, AgentState)
+    assert final_state.final_response == 'Academic years: 2024-2025'
+    assert final_state.agent_status == AgentStatus.COMPLETED
+    assert final_state.decision is not None
+    assert final_state.decision.action == AgentDecisionAction.FINALIZE
+    assert len(final_state.observations) == 1
+    assert final_state.observations[0].tool_name == 'academic.get_all_academic_years_by_branch_id'
+    assert calls[0]['server'] == 'vidhya-mcp'
+    assert calls[0]['arguments']['context']['authorization'] is None
+
+
+@pytest.mark.asyncio
 async def test_tool_executor_runs_multi_step_plan_and_binds_previous_output():
     from app.mcp_client.models.response import InvocationStatus, ToolResponse
     from app.models.planner import ExecutionPlanStep, PlannerOutput
@@ -1186,7 +1270,7 @@ def test_model_gateway_client_request_contract():
 
     class DummyClient:
         def __init__(self, *args, **kwargs):
-            captured_timeouts.append(kwargs['timeout'])
+            self.is_closed = False
 
         async def __aenter__(self):
             return self
@@ -1194,7 +1278,11 @@ def test_model_gateway_client_request_contract():
         async def __aexit__(self, exc_type, exc, tb):
             return False
 
-        async def post(self, url, json):
+        async def aclose(self):
+            self.is_closed = True
+
+        async def post(self, url, json, timeout):
+            captured_timeouts.append(timeout)
             captured.append({'url': url, 'json': json})
             if url.endswith('/planner'):
                 return DummyResponse(
@@ -1264,7 +1352,7 @@ def test_model_gateway_client_can_opt_into_planner_prompt_forwarding():
 
     class DummyClient:
         def __init__(self, *args, **kwargs):
-            pass
+            self.is_closed = False
 
         async def __aenter__(self):
             return self
@@ -1272,7 +1360,10 @@ def test_model_gateway_client_can_opt_into_planner_prompt_forwarding():
         async def __aexit__(self, exc_type, exc, tb):
             return False
 
-        async def post(self, url, json):
+        async def aclose(self):
+            self.is_closed = True
+
+        async def post(self, url, json, timeout):
             captured.append(json)
             return DummyResponse()
 
@@ -1672,6 +1763,27 @@ def test_settings_accepts_model_gateway_operation_timeout_overrides(monkeypatch)
     assert settings.model_gateway_send_planner_prompt is True
 
 
+def test_build_mcp_client_uses_configured_retry_count():
+    from app.services.dependencies import build_mcp_client
+
+    settings = type(
+        'Settings',
+        (),
+        {
+            'mcp_connect_timeout_seconds': 5.0,
+            'mcp_read_timeout_seconds': 30.0,
+            'mcp_write_timeout_seconds': 10.0,
+            'mcp_pool_timeout_seconds': 5.0,
+            'mcp_verify_tls': True,
+            'mcp_max_retries': 4,
+        },
+    )()
+
+    client = build_mcp_client(settings)
+
+    assert client._retry.max_attempts == 5
+
+
 def test_tool_executor_keeps_identity_values_inside_context_only():
     from app.models.runtime import RuntimeContext
     from app.tool_executor.service import ToolExecutorService
@@ -1692,3 +1804,21 @@ def test_tool_executor_keeps_identity_values_inside_context_only():
     assert arguments['context']['branch_id'] == 'branch-1'
     assert arguments['context']['organization_id'] == 'org-1'
     assert arguments['context']['user_id'] == 'user-1'
+
+
+def test_redaction_masks_nested_authorization_and_jwt_values():
+    from app.utils.redaction import redact_sensitive
+
+    redacted = redact_sensitive(
+        {
+            'authorization': 'Bearer abc.def.ghi',
+            'nested': {
+                'jwt': 'raw-jwt-token',
+                'message': 'forward Bearer xyz.123.token safely secret=plain-value',
+            },
+        }
+    )
+
+    assert redacted['authorization'] == '<redacted>'
+    assert redacted['nested']['jwt'] == '<redacted>'
+    assert redacted['nested']['message'] == 'forward Bearer <redacted> safely secret=<redacted>'

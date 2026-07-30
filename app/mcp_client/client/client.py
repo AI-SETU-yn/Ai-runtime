@@ -9,6 +9,7 @@ from ..models.response import HealthStatus, ToolResponse
 from ..models.server import ServerConfig
 from ..utils.retry import RetryPolicy, retry_async
 from ...utils.json_logging import pretty_json
+from ...utils.redaction import redact_sensitive
 from .factory import MCPClientFactory
 from .manager import MCPClientManager
 
@@ -28,7 +29,7 @@ class MCPClient:
 
     async def invoke_tool(self, server: str, tool: str, arguments: dict[str, Any] | None = None, *, context: dict[str, Any] | None = None, trace_id: str | None = None, request_id: str | None = None) -> ToolResponse:
         config = self._manager.registry.get(server)
-        logger.info('mcp_client_selection_json\n%s', pretty_json({
+        logger.info('mcp_client_selection_json\n%s', pretty_json(redact_sensitive({
             'server_selected': config.name,
             'base_url': config.base_url,
             'endpoint_path': config.endpoint_path,
@@ -36,14 +37,14 @@ class MCPClient:
             'request_payload': arguments or {},
             'context': context or {},
             'timeout_policy': self._retry.max_attempts,
-        }))
+        })))
         transport = self._factory.create_transport(config)
         async def operation() -> object:
             return await self._executor.execute(transport, tool, arguments, context=context, trace_id=trace_id, request_id=request_id)
         response = await retry_async(operation, self._retry)
         if not isinstance(response, ToolResponse):
             raise ResponseParseError('MCP executor returned an unexpected response type')
-        logger.info('mcp_client_response_json\n%s', pretty_json(response.model_dump(by_alias=True)))
+        logger.info('mcp_client_response_json\n%s', pretty_json(redact_sensitive(response.model_dump(by_alias=True))))
         return response
 
     async def health_check(self, server: str) -> HealthStatus:

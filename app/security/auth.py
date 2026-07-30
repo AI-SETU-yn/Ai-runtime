@@ -27,10 +27,26 @@ class JwtService:
     def validate_token(self, token: str) -> dict[str, Any]:
         if not self._settings.jwt_secret:
             raise UnauthorizedError('JWT validation secret is not configured.')
+        issuer = getattr(self._settings, 'jwt_issuer', None)
+        audience = getattr(self._settings, 'jwt_audience', None)
         try:
-            return jwt.decode(token, self._settings.jwt_secret, algorithms=[self._settings.jwt_algorithm])
+            return jwt.decode(
+                token,
+                self._settings.jwt_secret,
+                algorithms=[self._settings.jwt_algorithm],
+                issuer=issuer,
+                audience=audience,
+                options={
+                    'verify_iss': issuer is not None,
+                    'verify_aud': audience is not None,
+                },
+            )
         except jwt.ExpiredSignatureError as exc:
             raise UnauthorizedError('JWT token has expired.') from exc
+        except jwt.InvalidIssuerError as exc:
+            raise UnauthorizedError('JWT issuer is invalid.') from exc
+        except jwt.InvalidAudienceError as exc:
+            raise UnauthorizedError('JWT audience is invalid.') from exc
         except jwt.InvalidSignatureError as exc:
             raise UnauthorizedError('JWT signature is invalid.') from exc
         except jwt.InvalidTokenError as exc:

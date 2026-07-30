@@ -31,3 +31,12 @@ def test_output_guardrail_redacts_sensitive_values():
     assert '[redacted-phone]' in result.final_text
     assert '[redacted-token]' in result.final_text
     assert len(result.triggered) == 3
+
+
+def test_output_guardrail_preserves_academic_year_ranges():
+    engine = build_engine()
+
+    result = engine.enforce_output('Academic years: 2024-2025, 2025-2026')
+
+    assert result.final_text == 'Academic years: 2024-2025, 2025-2026'
+    assert result.triggered == []

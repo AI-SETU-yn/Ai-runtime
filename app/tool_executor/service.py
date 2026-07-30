@@ -9,12 +9,15 @@ from typing import Any
 from app.mcp_client import MCPClient
 from app.mcp_client.exceptions import (
     AuthenticationError,
+    InvocationError,
     MCPConnectionError,
     MCPTimeoutError,
+    RequestValidationError,
     ResponseParseError,
     ServerNotFoundError,
     ServerUnavailableError,
 )
+from app.mcp_client.models.response import ToolResponse
 from app.models.planner import ExecutionPlanStep, PlannerOutput
 from app.models.runtime import RuntimeContext
 from app.tool_executor.exceptions import ToolExecutionError, ToolResolutionError
@@ -22,6 +25,7 @@ from app.tool_registry.exceptions import DuplicateToolException, ToolNotFoundExc
 from app.tool_registry.models import ResolvedTool
 from app.tool_registry.service import ToolRegistryService
 from app.utils.json_logging import pretty_json
+from app.utils.redaction import redact_sensitive
 
 logger = logging.getLogger(__name__)
 
@@ -93,7 +97,7 @@ class ToolExecutorService:
 
         mcp_arguments = self._build_arguments(planner_output.parameters, runtime_context, request_id, correlation_id, trace_id)
         mcp_context = self._build_context(runtime_context, request_id, correlation_id, trace_id)
-        logger.info('tool_execution_request_json\n%s', pretty_json(self._redact_sensitive({
+        logger.info('tool_execution_request_json\n%s', pretty_json(redact_sensitive({
             'tool': resolved_tool.tool.name,
             'server': resolved_tool.server,
             'arguments': mcp_arguments,
@@ -101,25 +105,13 @@ class ToolExecutorService:
         })))
 
         tool_started = perf_counter()
-        try:
-            response = await self._mcp_client.invoke_tool(
-                resolved_tool.server,
-                resolved_tool.tool.name,
-                mcp_arguments,
-                context=mcp_context,
-                trace_id=trace_id,
-                request_id=request_id,
-            )
-        except AuthenticationError as exc:
-            raise ToolExecutionError('Authentication failed while calling MCP server.', code='AUTHENTICATION_ERROR', status_code=401) from exc
-        except ServerNotFoundError as exc:
-            raise ToolExecutionError(str(exc), code='SERVER_ERROR', status_code=502) from exc
-        except MCPTimeoutError as exc:
-            raise ToolExecutionError('MCP server request timed out.', code='TIMEOUT', status_code=504) from exc
-        except (MCPConnectionError, ServerUnavailableError) as exc:
-            raise ToolExecutionError('Transport error while calling MCP server.', code='TRANSPORT_ERROR', status_code=502) from exc
-        except ResponseParseError as exc:
-            raise ToolExecutionError('Invalid MCP server response.', code='SERVER_ERROR', status_code=502) from exc
+        response = await self._invoke_mcp_tool(
+            resolved_tool=resolved_tool,
+            arguments=mcp_arguments,
+            context=mcp_context,
+            trace_id=trace_id,
+            request_id=request_id,
+        )
 
         execution_latency_ms = round((perf_counter() - tool_started) * 1000, 2)
         normalized = {
@@ -133,7 +125,7 @@ class ToolExecutorService:
             'registry_lookup_latency_ms': lookup_latency_ms,
             'tool_execution_latency_ms': execution_latency_ms,
         }
-        logger.info('tool_execution_response_json\n%s', pretty_json(normalized))
+        logger.info('tool_execution_response_json\n%s', pretty_json(redact_sensitive(normalized)))
         logger.info(
             'tool_execution_completed planner_latency_ms=%s registry_lookup_latency_ms=%s tool_execution_latency_ms=%s mcp_server=%s tool_name=%s status=%s duration=%s',
             0.0,
@@ -145,6 +137,39 @@ class ToolExecutorService:
             execution_latency_ms,
         )
         return normalized
+
+    async def _invoke_mcp_tool(
+        self,
+        *,
+        resolved_tool: ResolvedTool,
+        arguments: dict[str, Any],
+        context: dict[str, Any],
+        trace_id: str,
+        request_id: str,
+    ) -> ToolResponse:
+        try:
+            return await self._mcp_client.invoke_tool(
+                resolved_tool.server,
+                resolved_tool.tool.name,
+                arguments,
+                context=context,
+                trace_id=trace_id,
+                request_id=request_id,
+            )
+        except AuthenticationError as exc:
+            raise ToolExecutionError('Authentication failed while calling MCP server.', code='AUTHENTICATION_ERROR', status_code=401) from exc
+        except ServerNotFoundError as exc:
+            raise ToolExecutionError(str(exc), code='SERVER_ERROR', status_code=502) from exc
+        except MCPTimeoutError as exc:
+            raise ToolExecutionError('MCP server request timed out.', code='TIMEOUT', status_code=504) from exc
+        except (MCPConnectionError, ServerUnavailableError) as exc:
+            raise ToolExecutionError('Transport error while calling MCP server.', code='TRANSPORT_ERROR', status_code=502) from exc
+        except RequestValidationError as exc:
+            raise ToolExecutionError('Invalid MCP tool invocation request.', code='INVALID_TOOL_REQUEST', status_code=422) from exc
+        except ResponseParseError as exc:
+            raise ToolExecutionError('Invalid MCP server response.', code='SERVER_ERROR', status_code=502) from exc
+        except InvocationError as exc:
+            raise ToolExecutionError('MCP tool invocation failed.', code='TOOL_INVOCATION_ERROR', status_code=502) from exc
 
     async def _execute_plan(
         self,
@@ -203,7 +228,7 @@ class ToolExecutorService:
                     details={'code': exc.code},
                 )
             step_output.parameters = parameters
-            logger.info('tool_execution_plan_step_request_json\n%s', pretty_json(self._redact_sensitive({
+            logger.info('tool_execution_plan_step_request_json\n%s', pretty_json(redact_sensitive({
                 'step_id': step_id,
                 'depends_on': step.depends_on,
                 'parameter_bindings': step.parameter_bindings,
@@ -255,7 +280,7 @@ class ToolExecutorService:
             'steps': ordered_results,
             'final_step_id': final_step['step_id'],
         }
-        logger.info('tool_execution_plan_completed_json\n%s', pretty_json(self._redact_sensitive(plan_result)))
+        logger.info('tool_execution_plan_completed_json\n%s', pretty_json(redact_sensitive(plan_result)))
         return plan_result
 
     @classmethod
@@ -631,14 +656,3 @@ class ToolExecutorService:
         if jwt_token.lower().startswith('bearer '):
             return jwt_token
         return f'Bearer {jwt_token}'
-
-    @classmethod
-    def _redact_sensitive(cls, value: Any) -> Any:
-        if isinstance(value, dict):
-            return {
-                key: '<redacted>' if key in {'jwt', 'authorization'} and item else cls._redact_sensitive(item)
-                for key, item in value.items()
-            }
-        if isinstance(value, list):
-            return [cls._redact_sensitive(item) for item in value]
-        return value

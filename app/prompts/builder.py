@@ -20,7 +20,13 @@ class PromptBuilder:
         'errors',
     }
 
-    def build_planner_prompt(self, message: str, *, registry_context: str | None = None) -> str:
+    def build_planner_prompt(
+        self,
+        message: str,
+        *,
+        registry_context: str | None = None,
+        base_prompt: str = PLANNER_PROMPT,
+    ) -> str:
         registry_section = ''
         if registry_context:
             registry_section = (
@@ -34,7 +40,7 @@ class PromptBuilder:
                 '{"targetParameter":{"from_step":"step_1","path":"$.data[?(@.field==true)].referenceId"}}. '
                 'The path must point to factual data returned by a previous step.'
             )
-        return f"{PLANNER_PROMPT}{registry_section}\n\nUser message:\n{message}"
+        return f"{base_prompt}{registry_section}\n\nUser message:\n{message}"
 
     def build_response_prompt(
         self,

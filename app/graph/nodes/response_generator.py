@@ -5,6 +5,7 @@ from app.graph.state import RuntimeState
 from app.model_gateway.client import ModelGatewayClient
 from app.prompts.builder import PromptBuilder
 from app.utils.json_logging import pretty_json
+from app.utils.redaction import redact_sensitive
 
 logger = logging.getLogger(__name__)
 
@@ -19,11 +20,11 @@ class ResponseGeneratorNode:
         assert planner_output is not None
         if self._tool_failed(state.tool_execution_result):
             answer = self._tool_failure_answer(state.tool_execution_result)
-            logger.warning('response_generation_skipped_failed_tool_json\n%s', pretty_json({
+            logger.warning('response_generation_skipped_failed_tool_json\n%s', pretty_json(redact_sensitive({
                 'planner_intent': planner_output.intent,
                 'tool_execution_result': state.tool_execution_result,
                 'final_response': answer,
-            }))
+            })))
             return {
                 'model_response': answer,
                 'final_response': answer,
@@ -35,7 +36,7 @@ class ResponseGeneratorNode:
             planner_output.requires_tool,
             state.tool_execution_result,
         )
-        logger.info('response_generator_prompt_json\n%s', pretty_json({
+        logger.info('response_generator_prompt_json\n%s', pretty_json(redact_sensitive({
             'user_question': state.user_question,
             'planner_intent': planner_output.intent,
             'requires_tool': planner_output.requires_tool,
@@ -46,7 +47,7 @@ class ResponseGeneratorNode:
             'parameters': planner_output.parameters,
             'tool_execution_result': state.tool_execution_result,
             'grounded_prompt': prompt,
-        }))
+        })))
         answer = await self._model_gateway_client.generate(
             prompt,
             metadata={
@@ -62,7 +63,7 @@ class ResponseGeneratorNode:
                 'trace_id': state.trace_id,
             },
         )
-        logger.info('final_response_json\n%s', pretty_json({'final_response': answer}))
+        logger.info('final_response_json\n%s', pretty_json(redact_sensitive({'final_response': answer})))
         return {
             'model_response': answer,
             'final_response': answer,

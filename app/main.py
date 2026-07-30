@@ -13,16 +13,8 @@ from app.exceptions.handlers import (
     request_validation_exception_handler,
     unhandled_exception_handler,
 )
-from app.graph.graph import WorkflowManager
 from app.middleware.request_context import RequestContextMiddleware
-from app.model_gateway.client import ModelGatewayClient
-from app.planner.parser import PlannerOutputParser
-from app.planner.planner import PlannerService
-from app.planner.prompts import PlannerPromptProvider
-from app.planner.registry_validator import PlannerRegistryValidator
-from app.prompts.builder import PromptBuilder
-from app.services.dependencies import get_guardrail_engine, get_mcp_client, get_tool_registry_service
-from app.tool_executor.service import ToolExecutorService
+from app.services.dependencies import close_runtime_clients, get_guardrail_engine, get_mcp_client, get_tool_registry_service
 from app.utils.logging import configure_logging
 
 logger = logging.getLogger(__name__)
@@ -72,25 +64,14 @@ async def lifespan(app: FastAPI):
         },
     )
 
-    model_gateway_client = ModelGatewayClient(settings)
-    planner_service = PlannerService(
-        PromptBuilder(),
-        PlannerPromptProvider(),
-        PlannerOutputParser(),
-        model_gateway_client,
-        PlannerRegistryValidator(tool_registry_service),
-    )
-    tool_executor_service = ToolExecutorService(tool_registry_service, mcp_client)
-    workflow_manager = WorkflowManager(planner_service, model_gateway_client, tool_executor_service)
-    app.state.workflow_manager = workflow_manager
-    logger.info('workflow_initialized')
+    logger.info('workflow_ready_for_lazy_initialization')
 
     app.state.is_ready = settings.ready_on_startup
     try:
         yield
     finally:
         app.state.is_ready = False
-        await mcp_client.close()
+        await close_runtime_clients()
 
 
 

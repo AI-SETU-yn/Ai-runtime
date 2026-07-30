@@ -20,6 +20,7 @@ _FLAG_MAP = {
 class GuardrailEngine:
     def __init__(self, config: GuardrailsConfig) -> None:
         self._config = config
+        self._compiled_patterns = self._compile_regex_rules(config)
 
     def enforce_input(self, message: str) -> GuardrailEvaluationResult:
         return self._evaluate('input', message)
@@ -80,11 +81,9 @@ class GuardrailEngine:
         return text, None
 
     def _apply_regex(self, rule: GuardrailRule, text: str) -> tuple[str, GuardrailDecision | None]:
-        flags = self._resolve_flags(rule.flags)
         matched = False
         updated = text
-        for pattern in rule.patterns:
-            compiled = re.compile(pattern, flags)
+        for compiled in self._compiled_patterns.get(rule.id, []):
             if rule.action == 'redact':
                 replaced, count = compiled.subn(rule.replacement, updated)
                 if count:
@@ -96,6 +95,17 @@ class GuardrailEngine:
         if not matched:
             return text, None
         return updated, self._decision(rule)
+
+    @classmethod
+    def _compile_regex_rules(cls, config: GuardrailsConfig) -> dict[str, list[re.Pattern[str]]]:
+        compiled_patterns: dict[str, list[re.Pattern[str]]] = {}
+        for stage in (config.input, config.output):
+            for rule in stage.rules:
+                if rule.type != 'regex':
+                    continue
+                flags = cls._resolve_flags(rule.flags)
+                compiled_patterns[rule.id] = [re.compile(pattern, flags) for pattern in rule.patterns]
+        return compiled_patterns
 
     @staticmethod
     def _resolve_flags(flag_names: list[str]) -> int:

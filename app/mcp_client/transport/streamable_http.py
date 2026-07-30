@@ -11,6 +11,7 @@ from ..executor.response_parser import ResponseParser
 from ..models.request import ToolRequest
 from ..models.response import ToolResponse
 from ...utils.json_logging import pretty_json
+from ...utils.redaction import redact_sensitive
 from .base import BaseTransport
 
 
@@ -28,12 +29,12 @@ class StreamableHTTPTransport(BaseTransport):
         started = time.perf_counter()
         wire_payload = request.wire_payload()
         headers = self._headers(request)
-        logger.info('mcp_transport_request_json\n%s', pretty_json({
+        logger.info('mcp_transport_request_json\n%s', pretty_json(redact_sensitive({
             'server': self._session.server.name,
             'endpoint': f"{self._session.server.base_url}{self._session.server.endpoint_path}",
             'headers': headers,
             'payload': wire_payload,
-        }))
+        })))
         try:
             response = await (await self._session.client()).post(
                 self._session.server.endpoint_path,
@@ -58,12 +59,12 @@ class StreamableHTTPTransport(BaseTransport):
             raise InvocationError(f"MCP server returned {response.status_code}")
         payload = self._response_payload(response, request)
         latency_ms = round((time.perf_counter() - started) * 1000, 2)
-        logger.info('mcp_transport_response_json\n%s', pretty_json({
+        logger.info('mcp_transport_response_json\n%s', pretty_json(redact_sensitive({
             'server': self._session.server.name,
             'status_code': response.status_code,
             'latency_ms': latency_ms,
             'payload': payload,
-        }))
+        })))
         return self._parser.parse(payload, request, latency_ms / 1000, response.status_code)
 
     def _headers(self, request: ToolRequest) -> dict[str, str]:
