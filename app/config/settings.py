@@ -39,6 +39,7 @@ class Settings(BaseSettings):
     model_gateway_url: str = 'http://localhost:9000'
     model_gateway_chat_path: str = '/generate'
     model_gateway_planner_path: str = '/planner'
+    model_gateway_security_path: str = '/security/classify'
     model_gateway_adapter: str = ''
     model_gateway_timeout_seconds: float = 30.0
     model_gateway_connect_timeout_seconds: float = 5.0
@@ -68,6 +69,9 @@ class Settings(BaseSettings):
     model_gateway_generate_timeout_seconds: float = 90.0
     model_gateway_generate_connect_timeout_seconds: float = 5.0
     model_gateway_generate_read_timeout_seconds: float = 90.0
+    model_gateway_security_timeout_seconds: float = 30.0
+    model_gateway_security_connect_timeout_seconds: float = 5.0
+    model_gateway_security_read_timeout_seconds: float = 30.0
     model_gateway_max_retries: int = 2
 
     mcp_servers_config_path: Path = Path('app/mcp_client/config/servers.yaml')
@@ -88,4 +92,3 @@ class Settings(BaseSettings):
 @lru_cache(maxsize=1)
 def get_settings() -> Settings:
     return Settings()
-

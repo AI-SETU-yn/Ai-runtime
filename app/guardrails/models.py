@@ -5,6 +5,16 @@ from typing import Literal
 from pydantic import BaseModel, ConfigDict, Field
 
 
+class SecurityClassifierSettings(BaseModel):
+    model_config = ConfigDict(extra='forbid')
+
+    enabled: bool = True
+    mode: Literal['hybrid'] = 'hybrid'
+    always_run: bool = False
+    confidence_threshold: float = Field(default=0.9, ge=0.0, le=1.0)
+    suspicious_tags: list[str] = Field(default_factory=lambda: ['suspicious'])
+
+
 class GuardrailRule(BaseModel):
     model_config = ConfigDict(extra='forbid')
 
@@ -34,6 +44,7 @@ class GuardrailsConfig(BaseModel):
 
     input: GuardrailStageConfig = Field(default_factory=GuardrailStageConfig)
     output: GuardrailStageConfig = Field(default_factory=GuardrailStageConfig)
+    security_classifier: SecurityClassifierSettings = Field(default_factory=SecurityClassifierSettings)
 
 
 class GuardrailDecision(BaseModel):
@@ -44,6 +55,7 @@ class GuardrailDecision(BaseModel):
     target: str
     message: str | None = None
     tags: list[str] = Field(default_factory=list)
+    deferred: bool = False
 
 
 class GuardrailEvaluationResult(BaseModel):
@@ -58,3 +70,7 @@ class GuardrailEvaluationResult(BaseModel):
     @property
     def redacted(self) -> bool:
         return self.original_text != self.final_text
+
+    @property
+    def suspicious(self) -> bool:
+        return any('suspicious' in decision.tags for decision in self.triggered)

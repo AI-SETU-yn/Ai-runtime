@@ -1,4 +1,4 @@
-import json
+﻿import json
 from typing import Any
 
 from app.prompts.templates import PLANNER_PROMPT, RESPONSE_SYSTEM_PROMPT
@@ -28,6 +28,7 @@ class PromptBuilder:
                 f'domain/service/entity/operation combinations and derive intent as service.entity.operation:\n'
                 f'{registry_context}\n\n'
                 'If one user request needs multiple tools, return execution_plan as an ordered list of steps. '
+                'If the user asks for multiple independent datasets, include one step per requested dataset even when no step depends on another. '
                 'Each step must include step_id, domain, service, entity, operation, intent, parameters, '
                 'depends_on, and optional parameter_bindings. Use parameter_bindings when a parameter must be '
                 'read from a previous step, for example: '
@@ -52,14 +53,17 @@ class PromptBuilder:
             f"User message:\n{message}"
         )
 
-    @classmethod
-    def _build_enterprise_context(cls, tool_execution_result: dict[str, object] | None) -> str:
+    def extract_enterprise_data(self, tool_execution_result: dict[str, object] | None) -> Any:
         if not tool_execution_result:
-            return '{}'
+            return None
+        business_data = self._extract_business_data(tool_execution_result)
+        return self._strip_metadata(business_data)
 
-        business_data = cls._extract_business_data(tool_execution_result)
-        cleaned = cls._strip_metadata(business_data)
-        return json.dumps(cleaned, ensure_ascii=True, default=str, separators=(',', ':'))
+    def _build_enterprise_context(self, tool_execution_result: dict[str, object] | None) -> str:
+        enterprise_data = self.extract_enterprise_data(tool_execution_result)
+        if enterprise_data in (None, {}):
+            return '{}'
+        return json.dumps(enterprise_data, ensure_ascii=True, default=str, separators=(',', ':'))
 
     @classmethod
     def _extract_business_data(cls, value: Any) -> Any:

@@ -13,6 +13,15 @@ class GuardrailMetadata(BaseModel):
     output: list[GuardrailOutcome] = Field(default_factory=list)
 
 
+class SecurityMetadata(BaseModel):
+    executed: bool = False
+    triggered_by: str | None = None
+    safe: bool | None = None
+    category: str | None = None
+    confidence: float | None = None
+    reason: str | None = None
+
+
 class ConversationMetadata(BaseModel):
     conversation_id: str
     request_id: str
@@ -22,6 +31,7 @@ class ConversationMetadata(BaseModel):
     requires_tool: bool = False
     trace_id: str | None = None
     guardrails: GuardrailMetadata | None = None
+    security: SecurityMetadata | None = None
 
 
 class ChatResponse(BaseModel):

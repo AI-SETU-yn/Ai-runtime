@@ -1,4 +1,4 @@
-from __future__ import annotations
+﻿from __future__ import annotations
 
 import logging
 import re
@@ -55,6 +55,28 @@ class PlannerRegistryValidator:
 
         return self._normalize_and_validate_single(output)
 
+
+    def plan_requires_additional_steps(self, output: PlannerOutput) -> bool:
+        if not output.requires_tool or len(output.execution_plan) != 1:
+            return False
+        step = output.execution_plan[0]
+        step_output = PlannerOutput(
+            intent=step.intent or output.intent,
+            requires_tool=True,
+            domain=step.domain or output.domain,
+            service=step.service or output.service,
+            entity=step.entity,
+            operation=step.operation,
+            tool=step.tool,
+            parameters=step.parameters,
+            adapter=output.adapter,
+            model=output.model,
+        )
+        validation = self._normalize_and_validate_single(step_output)
+        if validation.failure_reason:
+            return False
+        return len(validation.output.execution_plan) > 1
+
     def _normalize_and_validate_plan(self, output: PlannerOutput) -> PlannerValidationResult:
         original = output.model_dump()
         normalized_steps: list[ExecutionPlanStep] = []
@@ -97,6 +119,11 @@ class PlannerRegistryValidator:
                     parameters=normalized.parameters,
                     parameter_bindings=step.parameter_bindings,
                     depends_on=step.depends_on,
+                    question=step.question,
+                    visible_in_response=step.visible_in_response,
+                    status=step.status,
+                    execution_time_ms=step.execution_time_ms,
+                    tool_name=step.tool_name,
                 )
             )
             reasons.extend(f'step_{index}_{reason}' for reason in validation.reasons)
@@ -306,6 +333,8 @@ class PlannerRegistryValidator:
                         entity=source_target.entity,
                         operation=source_target.operation,
                         parameters={},
+                        question=None,
+                        visible_in_response=False,
                     )
                 )
             parameter_bindings[parameter] = {
@@ -326,6 +355,8 @@ class PlannerRegistryValidator:
             parameters=output.parameters,
             parameter_bindings=parameter_bindings,
             depends_on=list(dict.fromkeys(depends_on)),
+            question=None,
+            visible_in_response=True,
         )
         expanded_output = output.model_copy(
             update={
@@ -514,3 +545,4 @@ class PlannerRegistryValidator:
             if token.endswith('s') and len(token) > 3:
                 tokens.add(token[:-1])
         return tokens
+

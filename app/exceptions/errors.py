@@ -1,4 +1,4 @@
-class AppException(Exception):
+﻿class AppException(Exception):
     status_code = 500
     code = 'INTERNAL_ERROR'
 
@@ -24,6 +24,11 @@ class ForbiddenError(AppException):
 class PlannerError(AppException):
     status_code = 502
     code = 'PLANNER_ERROR'
+
+
+class PlannerValidationError(PlannerError):
+    status_code = 502
+    code = 'PLANNER_VALIDATION_ERROR'
 
 
 class ModelGatewayError(AppException):

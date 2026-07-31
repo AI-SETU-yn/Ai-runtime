@@ -1,4 +1,4 @@
-input:
+﻿input:
   rules:
     - id: input.max_length
       description: Blocks unusually large prompts that can degrade quality or exhaust runtime capacity.
@@ -12,7 +12,7 @@ input:
         - availability
         - abuse-prevention
     - id: input.prompt_injection
-      description: Blocks common prompt-injection and instruction-override attempts.
+      description: Flags common prompt-injection and instruction-override attempts for AI security classification.
       enabled: true
       type: regex
       action: block
@@ -20,22 +20,24 @@ input:
       patterns:
         - '(?i)ignore\s+(all|previous|prior)\s+(instructions|rules|prompts)'
         - '(?i)disregard\s+(all|previous|prior)\s+(instructions|rules|prompts)'
-        - '(?i)reveal\s+(the\s+)?(system prompt|hidden instructions|developer prompt)'
+        - '(?i)(reveal|show|tell|give)(?:\s+me)?\s+(?:the\s+)?(system prompt|hidden instructions|developer prompt)'
         - '(?i)bypass\s+(security|guardrails|safety)'
-      message: Request blocked by input security policy.
+      message: Request requires AI security review.
       tags:
+        - suspicious
         - prompt-injection
         - security
     - id: input.secret_exfiltration
-      description: Blocks requests that explicitly ask for credentials, tokens, or secrets.
+      description: Flags requests that explicitly ask for credentials, tokens, or secrets.
       enabled: true
       type: regex
       action: block
       target: message
       patterns:
         - '(?i)(api[_ -]?key|access[_ -]?token|refresh[_ -]?token|private[_ -]?key|secret)'
-      message: Request blocked by sensitive-data protection policy.
+      message: Request requires AI security review.
       tags:
+        - suspicious
         - secret-protection
         - data-loss-prevention
 output:
@@ -78,3 +80,10 @@ output:
       tags:
         - pii
         - redaction
+security_classifier:
+  enabled: true
+  mode: hybrid
+  always_run: false
+  confidence_threshold: 0.9
+  suspicious_tags:
+    - suspicious

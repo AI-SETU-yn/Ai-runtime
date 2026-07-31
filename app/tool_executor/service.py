@@ -1,4 +1,4 @@
-from __future__ import annotations
+﻿from __future__ import annotations
 
 import logging
 import json
@@ -226,8 +226,15 @@ class ToolExecutorService:
             assert result is not None
             step_result = {
                 'step_id': step_id,
+                'entity': step.entity,
+                'intent': step.intent,
+                'question': step.question,
+                'visible_in_response': step.visible_in_response,
                 'depends_on': step.depends_on,
                 'parameter_bindings': step.parameter_bindings,
+                'status': result.get('status'),
+                'execution_time_ms': result.get('tool_execution_latency_ms'),
+                'tool_name': result.get('tool_name'),
                 'result': result,
             }
             step_results[step_id] = result
@@ -597,7 +604,8 @@ class ToolExecutorService:
             'trace_id': trace_id,
         }
         return arguments
-
+
+
     @staticmethod
     def _build_context(
         runtime_context: RuntimeContext,
@@ -642,3 +650,4 @@ class ToolExecutorService:
         if isinstance(value, list):
             return [cls._redact_sensitive(item) for item in value]
         return value
+

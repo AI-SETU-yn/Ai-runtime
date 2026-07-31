@@ -1,8 +1,9 @@
 import logging
 from time import perf_counter
 
-from app.exceptions.errors import PlannerError
+from app.exceptions.errors import PlannerError, PlannerValidationError
 from app.model_gateway.client import ModelGatewayClient
+from app.models.planner import PlannerOutput
 from app.planner.parser import PlannerOutputParser
 from app.planner.prompts import PlannerPromptProvider
 from app.planner.registry_validator import PlannerRegistryValidator
@@ -28,10 +29,38 @@ class PlannerService:
         self._registry_validator = registry_validator
 
     async def plan(self, message: str):
+        output = await self._request_plan(message, retry=False)
+        if self._should_retry_for_incomplete_execution_plan(output):
+            logger.warning('planner_validation_retry_json\n%s', pretty_json({
+                'message': message,
+                'reason': 'registry_proved_execution_plan_incomplete',
+                'initial_output': output.model_dump(),
+            }))
+            retried_output = await self._request_plan(message, retry=True)
+            if self._should_retry_for_incomplete_execution_plan(retried_output):
+                logger.error('planner_validation_failed_json\n%s', pretty_json({
+                    'message': message,
+                    'initial_output': output.model_dump(),
+                    'retried_output': retried_output.model_dump(),
+                }))
+                raise PlannerValidationError(
+                    'Planner returned an incomplete execution plan after retry.'
+                )
+            output = retried_output
+        return output
+
+    async def _request_plan(self, message: str, *, retry: bool):
         registry_context = self._registry_validator.registry_prompt_context() if self._registry_validator else None
         prompt = self._prompt_builder.build_planner_prompt(message, registry_context=registry_context)
+        if retry:
+            prompt = (
+                f'{prompt}\n\n'
+                'Planner validation retry: return a complete execution_plan with every required tool step. '
+                'Include dependency-only helper steps when registry metadata requires them. '
+                'Keep legacy single-tool responses only when the request truly resolves to one tool.'
+            )
         logger.info('planner_prompt_built')
-        logger.info('planner_request_json\n%s', pretty_json({'query': message, 'prompt': prompt}))
+        logger.info('planner_request_json\n%s', pretty_json({'query': message, 'prompt': prompt, 'retry': retry}))
 
         started = perf_counter()
         planner_response = await self._model_gateway_client.plan(message, prompt=prompt)
@@ -75,3 +104,14 @@ class PlannerService:
             raise PlannerError('Planner marked the request as tool-backed but did not return a complete execution target.')
         logger.info('planner_output_json\n%s', pretty_json(output.model_dump()))
         return output
+
+    def _should_retry_for_incomplete_execution_plan(self, output: PlannerOutput) -> bool:
+        if not output.requires_tool:
+            return False
+        if not output.execution_plan:
+            return False
+        if len(output.execution_plan) != 1:
+            return False
+        if not self._registry_validator:
+            return False
+        return self._registry_validator.plan_requires_additional_steps(output)
