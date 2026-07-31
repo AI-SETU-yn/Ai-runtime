@@ -13,12 +13,27 @@ class ConversationContext:
     conversation_id: str
 
 
+@dataclass(frozen=True)
+class ConversationContextTokens:
+    request_id: contextvars.Token
+    correlation_id: contextvars.Token
+    conversation_id: contextvars.Token
+
+
 class ConversationContextStore:
     @staticmethod
-    def set(context: ConversationContext) -> None:
-        request_id_var.set(context.request_id)
-        correlation_id_var.set(context.correlation_id)
-        conversation_id_var.set(context.conversation_id)
+    def set(context: ConversationContext) -> ConversationContextTokens:
+        return ConversationContextTokens(
+            request_id=request_id_var.set(context.request_id),
+            correlation_id=correlation_id_var.set(context.correlation_id),
+            conversation_id=conversation_id_var.set(context.conversation_id),
+        )
+
+    @staticmethod
+    def reset(tokens: ConversationContextTokens) -> None:
+        request_id_var.reset(tokens.request_id)
+        correlation_id_var.reset(tokens.correlation_id)
+        conversation_id_var.reset(tokens.conversation_id)
 
     @staticmethod
     def get() -> ConversationContext:

@@ -2,7 +2,7 @@ from functools import lru_cache
 from pathlib import Path
 from typing import Literal
 
-from pydantic import AliasChoices, Field
+from pydantic import AliasChoices, Field, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -35,6 +35,8 @@ class Settings(BaseSettings):
 
     jwt_secret: str = Field(default='', validation_alias=AliasChoices('JWT_SECRET', 'AI_RUNTIME_JWT_SECRET'))
     jwt_algorithm: str = Field(default='HS256', validation_alias=AliasChoices('JWT_ALGORITHM', 'AI_RUNTIME_JWT_ALGORITHM'))
+    jwt_issuer: str | None = None
+    jwt_audience: str | None = None
 
     model_gateway_url: str = 'http://localhost:9000'
     model_gateway_chat_path: str = '/generate'
@@ -87,6 +89,18 @@ class Settings(BaseSettings):
     ready_on_startup: bool = True
     tool_registry_path: Path = Path('tool-registry')
     guardrails_config_path: Path = Path('app/config/guardrails.yaml')
+
+    @model_validator(mode='after')
+    def validate_production_security(self) -> 'Settings':
+        if self.environment != 'prod':
+            return self
+        if self.bypass_auth:
+            raise ValueError('AI_RUNTIME_BYPASS_AUTH must be false in prod.')
+        if not self.jwt_secret:
+            raise ValueError('AI_RUNTIME_JWT_SECRET must be configured in prod.')
+        if '*' in self.allowed_origins:
+            raise ValueError('AI_RUNTIME_ALLOWED_ORIGINS must not contain "*" in prod.')
+        return self
 
 
 @lru_cache(maxsize=1)

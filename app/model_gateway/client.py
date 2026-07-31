@@ -9,6 +9,7 @@ from app.config.settings import Settings
 from app.model_gateway.config import ModelGatewayRequestConfig
 from app.model_gateway.exceptions import ModelGatewayError, ModelGatewayTimeoutError
 from app.utils.json_logging import pretty_json
+from app.utils.redaction import redact_sensitive
 
 logger = logging.getLogger(__name__)
 
@@ -45,6 +46,7 @@ class ModelGatewayClient:
         )
         self._adapter = settings.model_gateway_adapter
         self._send_planner_prompt = getattr(settings, 'model_gateway_send_planner_prompt', False)
+        self._client: httpx.AsyncClient | None = None
 
     async def generate(self, prompt: str, *, metadata: dict[str, Any] | None = None) -> str:
         payload = {
@@ -77,7 +79,7 @@ class ModelGatewayClient:
         timeout = self._timeout_from_config(config)
         logger.info('model_gateway_%s_request_json\n%s', operation, pretty_json({
             'url': url,
-            'payload': payload,
+            'payload': redact_sensitive(payload),
             'timeout_seconds': config.timeout_seconds,
             'connect_timeout_seconds': config.connect_timeout_seconds,
             'read_timeout_seconds': config.read_timeout_seconds,
@@ -85,16 +87,17 @@ class ModelGatewayClient:
         for attempt in range(config.max_retries + 1):
             started = perf_counter()
             try:
-                async with httpx.AsyncClient(timeout=timeout) as client:
-                    response = await client.post(
-                        url,
-                        json=payload,
-                    )
+                client = await self._get_client()
+                response = await client.post(
+                    url,
+                    json=payload,
+                    timeout=timeout,
+                )
                 response.raise_for_status()
                 body = response.json()
                 latency_ms = round((perf_counter() - started) * 1000, 2)
                 logger.info('model_gateway_%s_response latency_ms=%s attempt=%s', operation, latency_ms, attempt + 1)
-                logger.info('model_gateway_%s_response_json\n%s', operation, pretty_json(body))
+                logger.info('model_gateway_%s_response_json\n%s', operation, pretty_json(redact_sensitive(body)))
                 return body
             except httpx.TimeoutException as exc:
                 last_error = exc
@@ -123,6 +126,15 @@ class ModelGatewayClient:
         if isinstance(last_error, httpx.TimeoutException):
             raise ModelGatewayTimeoutError('Model gateway request timed out.') from last_error
         raise ModelGatewayError('Model gateway request failed.') from last_error
+
+    async def close(self) -> None:
+        if self._client is not None and not self._client.is_closed:
+            await self._client.aclose()
+
+    async def _get_client(self) -> httpx.AsyncClient:
+        if self._client is None or self._client.is_closed:
+            self._client = httpx.AsyncClient()
+        return self._client
 
     @staticmethod
     def _timeout_from_config(config: ModelGatewayRequestConfig) -> httpx.Timeout:

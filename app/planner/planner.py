@@ -9,6 +9,7 @@ from app.planner.prompts import PlannerPromptProvider
 from app.planner.registry_validator import PlannerRegistryValidator
 from app.prompts.builder import PromptBuilder
 from app.utils.json_logging import pretty_json
+from app.utils.redaction import redact_sensitive
 
 logger = logging.getLogger(__name__)
 
@@ -51,7 +52,11 @@ class PlannerService:
 
     async def _request_plan(self, message: str, *, retry: bool):
         registry_context = self._registry_validator.registry_prompt_context() if self._registry_validator else None
-        prompt = self._prompt_builder.build_planner_prompt(message, registry_context=registry_context)
+        prompt = self._prompt_builder.build_planner_prompt(
+            message,
+            registry_context=registry_context,
+            base_prompt=self._prompt_provider.get_prompt_template(),
+        )
         if retry:
             prompt = (
                 f'{prompt}\n\n'
@@ -60,14 +65,14 @@ class PlannerService:
                 'Keep legacy single-tool responses only when the request truly resolves to one tool.'
             )
         logger.info('planner_prompt_built')
-        logger.info('planner_request_json\n%s', pretty_json({'query': message, 'prompt': prompt, 'retry': retry}))
+        logger.info('planner_request_json\n%s', pretty_json(redact_sensitive({'query': message, 'prompt': prompt, 'retry': retry})))
 
         started = perf_counter()
         planner_response = await self._model_gateway_client.plan(message, prompt=prompt)
         latency_ms = round((perf_counter() - started) * 1000, 2)
 
         logger.info('planner_response_received latency_ms=%s', latency_ms)
-        logger.info('planner_response_json\n%s', pretty_json(planner_response))
+        logger.info('planner_response_json\n%s', pretty_json(redact_sensitive(planner_response)))
         output = self._output_parser.parse(
             intent=planner_response.get('intent'),
             domain=planner_response.get('domain'),
@@ -83,10 +88,10 @@ class PlannerService:
             model=planner_response.get('model'),
         )
         original_output = output
-        logger.info('planner_original_output_json\n%s', pretty_json(original_output.model_dump()))
+        logger.info('planner_original_output_json\n%s', pretty_json(redact_sensitive(original_output.model_dump())))
         if self._registry_validator and output.requires_tool:
             validation = self._registry_validator.normalize_and_validate(output)
-            logger.info('planner_registry_validation_json\n%s', pretty_json({
+            logger.info('planner_registry_validation_json\n%s', pretty_json(redact_sensitive({
                 'original_output': original_output.model_dump(),
                 'normalized_output': validation.output.model_dump(),
                 'normalized': validation.normalized,
@@ -94,7 +99,7 @@ class PlannerService:
                 'registry_lookup_result': 'success' if validation.resolved_tool else 'failure',
                 'resolved_tool': validation.resolved_tool.model_dump() if validation.resolved_tool else None,
                 'failure_reason': validation.failure_reason,
-            }))
+            })))
             if validation.failure_reason:
                 raise PlannerError(validation.failure_reason)
             output = validation.output
@@ -102,7 +107,7 @@ class PlannerService:
             raise PlannerError('Planner could not determine an intent.')
         if output.requires_tool and not all((output.domain, output.service, output.entity, output.operation)):
             raise PlannerError('Planner marked the request as tool-backed but did not return a complete execution target.')
-        logger.info('planner_output_json\n%s', pretty_json(output.model_dump()))
+        logger.info('planner_output_json\n%s', pretty_json(redact_sensitive(output.model_dump())))
         return output
 
     def _should_retry_for_incomplete_execution_plan(self, output: PlannerOutput) -> bool:

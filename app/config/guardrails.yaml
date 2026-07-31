@@ -75,7 +75,7 @@ output:
       action: redact
       target: answer
       patterns:
-        - '(?<!\d)(?:\+?\d[\d\s().-]{7,}\d)(?!\d)'
+        - '(?<![\w-])(?:\+?\d{1,3}[\s().-]+)?(?:\d[\s().-]*){10,13}\d(?![\w-])'
       replacement: '[redacted-phone]'
       tags:
         - pii

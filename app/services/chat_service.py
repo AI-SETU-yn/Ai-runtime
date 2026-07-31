@@ -10,6 +10,7 @@ from app.models.response import ChatResponse, ConversationMetadata, GuardrailMet
 from app.models.runtime import RuntimeContext
 from app.security.service import SecurityClassificationService
 from app.utils.json_logging import pretty_json
+from app.utils.redaction import redact_sensitive
 
 logger = logging.getLogger(__name__)
 
@@ -44,7 +45,7 @@ class ChatService:
             }
         )
 
-        logger.info('chat_request_json\n%s', pretty_json({
+        logger.info('chat_request_json\n%s', pretty_json(redact_sensitive({
             'message': input_guardrail.final_text,
             'conversation_id': conversation_id,
             'request_id': request_id,
@@ -53,7 +54,7 @@ class ChatService:
             'guardrails': self._serialize_guardrails(input_guardrail),
             'security': self._serialize_security(security_result),
             'runtime_context': runtime_context.model_dump(exclude={'jwt'}),
-        }))
+        })))
 
         state = RuntimeState(
             conversation_id=conversation_id,
