@@ -14,7 +14,14 @@ from app.exceptions.handlers import (
     unhandled_exception_handler,
 )
 from app.middleware.request_context import RequestContextMiddleware
-from app.services.dependencies import close_runtime_clients, get_guardrail_engine, get_mcp_client, get_tool_registry_service
+from app.services.dependencies import (
+    close_runtime_clients,
+    get_guardrail_engine,
+    get_guardrails_config,
+    get_mcp_client,
+    get_security_classifier_service,
+    get_tool_registry_service,
+)
 from app.utils.logging import configure_logging
 
 logger = logging.getLogger(__name__)
@@ -54,8 +61,10 @@ async def lifespan(app: FastAPI):
     )
 
     mcp_client = get_mcp_client(settings)
+    guardrails_config = get_guardrails_config(settings)
     app.state.mcp_client = mcp_client
-    app.state.guardrail_engine = get_guardrail_engine(settings)
+    app.state.guardrail_engine = get_guardrail_engine(guardrails_config)
+    app.state.security_classifier_service = get_security_classifier_service(settings, guardrails_config)
     logger.info(
         'mcp_client_initialized',
         extra={
@@ -72,7 +81,6 @@ async def lifespan(app: FastAPI):
     finally:
         app.state.is_ready = False
         await close_runtime_clients()
-
 
 
 def create_app() -> FastAPI:
@@ -93,6 +101,7 @@ def create_app() -> FastAPI:
     app.add_exception_handler(Exception, unhandled_exception_handler)
 
     app.include_router(runtime_router)
+    app.include_router(runtime_router, prefix='/api/ai-runtime')
     return app
 
 

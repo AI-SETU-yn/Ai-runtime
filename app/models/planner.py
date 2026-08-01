@@ -1,4 +1,4 @@
-from typing import Any
+﻿from typing import Any
 
 from pydantic import AliasChoices, BaseModel, ConfigDict, Field
 
@@ -19,6 +19,17 @@ class ExecutionPlanStep(BaseModel):
         validation_alias=AliasChoices('parameter_bindings', 'parameterBindings', 'bindings'),
     )
     depends_on: list[str] = Field(default_factory=list, validation_alias=AliasChoices('depends_on', 'dependsOn'))
+    question: str | None = None
+    visible_in_response: bool = Field(
+        default=True,
+        validation_alias=AliasChoices('visible_in_response', 'visibleInResponse'),
+    )
+    status: str | None = None
+    execution_time_ms: float | None = Field(
+        default=None,
+        validation_alias=AliasChoices('execution_time_ms', 'executionTimeMs'),
+    )
+    tool_name: str | None = Field(default=None, validation_alias=AliasChoices('tool_name', 'toolName'))
 
 
 class PlannerOutput(BaseModel):

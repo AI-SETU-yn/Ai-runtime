@@ -6,6 +6,7 @@ from fastapi import Depends
 from app.config.settings import Settings, get_settings
 from app.graph.graph import WorkflowManager
 from app.guardrails import GuardrailEngine, GuardrailsLoader
+from app.guardrails.models import GuardrailsConfig
 from app.mcp_client import MCPClient
 from app.mcp_client.client.manager import MCPClientManager
 from app.mcp_client.connection.pool import ConnectionPool
@@ -18,6 +19,9 @@ from app.planner.planner import PlannerService
 from app.planner.prompts import PlannerPromptProvider
 from app.planner.registry_validator import PlannerRegistryValidator
 from app.prompts.builder import PromptBuilder
+from app.security.client import SecurityClassifierClient
+from app.security.models import SecurityClassifierConfig
+from app.security.service import SecurityClassificationService
 from app.services.chat_service import ChatService
 from app.tool_executor.service import ToolExecutorService
 from app.tool_registry.repository import ToolRegistryRepository
@@ -30,6 +34,8 @@ _tool_registry_repository = ToolRegistryRepository()
 _tool_registry_service = ToolRegistryService(_tool_registry_repository)
 _mcp_client: MCPClient | None = None
 _guardrail_engine: GuardrailEngine | None = None
+_guardrails_config: GuardrailsConfig | None = None
+_security_classifier_service: SecurityClassificationService | None = None
 _model_gateway_client: ModelGatewayClient | None = None
 _planner_service: PlannerService | None = None
 _tool_executor_service: ToolExecutorService | None = None
@@ -63,12 +69,32 @@ def get_tool_registry_service() -> ToolRegistryService:
     return _tool_registry_service
 
 
-def get_guardrail_engine(settings: Settings = Depends(get_settings)) -> GuardrailEngine:
+def get_guardrails_config(settings: Settings = Depends(get_settings)) -> GuardrailsConfig:
+    global _guardrails_config
+    if _guardrails_config is None:
+        _guardrails_config = GuardrailsLoader().load(settings.guardrails_config_path)
+    return _guardrails_config
+
+
+def get_guardrail_engine(config: GuardrailsConfig = Depends(get_guardrails_config)) -> GuardrailEngine:
     global _guardrail_engine
     if _guardrail_engine is None:
-        config = GuardrailsLoader().load(settings.guardrails_config_path)
         _guardrail_engine = GuardrailEngine(config)
     return _guardrail_engine
+
+
+def get_security_classifier_service(
+    settings: Settings = Depends(get_settings),
+    guardrails_config: GuardrailsConfig = Depends(get_guardrails_config),
+) -> SecurityClassificationService:
+    global _security_classifier_service
+    if _security_classifier_service is None:
+        classifier_config = SecurityClassifierConfig.model_validate(guardrails_config.security_classifier.model_dump())
+        _security_classifier_service = SecurityClassificationService(
+            SecurityClassifierClient(settings),
+            classifier_config,
+        )
+    return _security_classifier_service
 
 
 def get_planner_service(
@@ -145,12 +171,14 @@ def get_workflow_manager(
 def get_chat_service(
     workflow_manager: WorkflowManager = Depends(get_workflow_manager),
     guardrail_engine: GuardrailEngine = Depends(get_guardrail_engine),
+    security_classifier_service: SecurityClassificationService = Depends(get_security_classifier_service),
 ) -> ChatService:
-    return ChatService(workflow_manager, guardrail_engine)
+    return ChatService(workflow_manager, guardrail_engine, security_classifier_service)
 
 
 async def close_runtime_clients() -> None:
     global _mcp_client, _model_gateway_client, _planner_service, _tool_executor_service, _workflow_manager
+    global _guardrail_engine, _guardrails_config, _security_classifier_service
     close_operations = []
     if _mcp_client is not None:
         close_operations.append(_mcp_client.close())
@@ -168,3 +196,6 @@ async def close_runtime_clients() -> None:
     _planner_service = None
     _tool_executor_service = None
     _workflow_manager = None
+    _guardrail_engine = None
+    _guardrails_config = None
+    _security_classifier_service = None
