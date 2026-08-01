@@ -3,6 +3,8 @@ from time import perf_counter
 
 from app.exceptions.errors import PlannerError
 from app.model_gateway.client import ModelGatewayClient
+from app.model_gateway.exceptions import ModelGatewayError
+from app.models.planner import PlannerOutput
 from app.planner.parser import PlannerOutputParser
 from app.planner.prompts import PlannerPromptProvider
 from app.planner.registry_validator import PlannerRegistryValidator
@@ -39,7 +41,11 @@ class PlannerService:
         logger.info('planner_request_json\n%s', pretty_json(redact_sensitive({'query': message, 'prompt': prompt})))
 
         started = perf_counter()
-        planner_response = await self._model_gateway_client.plan(message, prompt=prompt)
+        try:
+            planner_response = await self._model_gateway_client.plan(message, prompt=prompt)
+        except ModelGatewayError:
+            logger.exception('planner_gateway_failed_using_general_chat_fallback')
+            return self._fallback_general_chat_output()
         latency_ms = round((perf_counter() - started) * 1000, 2)
 
         logger.info('planner_response_received latency_ms=%s', latency_ms)
@@ -80,3 +86,11 @@ class PlannerService:
             raise PlannerError('Planner marked the request as tool-backed but did not return a complete execution target.')
         logger.info('planner_output_json\n%s', pretty_json(redact_sensitive(output.model_dump())))
         return output
+
+    @staticmethod
+    def _fallback_general_chat_output() -> PlannerOutput:
+        return PlannerOutput(
+            intent='general.chat',
+            requires_tool=False,
+            raw_response='fallback:planner_gateway_unreachable',
+        )

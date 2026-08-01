@@ -36,6 +36,16 @@ class ModelGatewayTimeoutError(ModelGatewayError):
     code = 'MODEL_GATEWAY_TIMEOUT'
 
 
+class WebSearchError(AppException):
+    status_code = 502
+    code = 'WEB_SEARCH_ERROR'
+
+
+class WebSearchTimeoutError(WebSearchError):
+    status_code = 504
+    code = 'WEB_SEARCH_TIMEOUT'
+
+
 class GuardrailViolationError(AppException):
     status_code = 422
     code = 'GUARDRAIL_VIOLATION'

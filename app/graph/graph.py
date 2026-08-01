@@ -3,13 +3,14 @@ from langgraph.graph import END, START, StateGraph
 from app.agent.agent import GeneralAgent
 from app.agent.models import AgentState
 from app.agent.tool_discovery import ToolDiscovery
-from app.graph.nodes import ResponseGeneratorNode
+from app.graph.nodes import CurrentInfoRouterNode, ResponseGeneratorNode
 from app.graph.state import RuntimeState
 from app.model_gateway.client import ModelGatewayClient
 from app.planner.planner import PlannerService
 from app.prompts.builder import PromptBuilder
 from app.tool_executor.service import ToolExecutorService
 from app.tool_registry.service import ToolRegistryService
+from app.web_search.client import WebSearchClient
 
 
 class WorkflowManager:
@@ -19,6 +20,7 @@ class WorkflowManager:
         model_gateway_client: ModelGatewayClient,
         tool_executor_service: ToolExecutorService,
         tool_registry_service: ToolRegistryService | None = None,
+        web_search_client: WebSearchClient | None = None,
     ) -> None:
         self._response_generator_node = ResponseGeneratorNode(PromptBuilder(), model_gateway_client)
         self._general_agent = GeneralAgent(
@@ -26,6 +28,7 @@ class WorkflowManager:
             tool_executor_service,
             self._response_generator_node,
             tool_discovery=ToolDiscovery(tool_registry_service),
+            current_info_router=CurrentInfoRouterNode(web_search_client),
         )
         self._graph = self._build_graph()
 

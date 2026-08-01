@@ -22,6 +22,7 @@ from app.services.chat_service import ChatService
 from app.tool_executor.service import ToolExecutorService
 from app.tool_registry.repository import ToolRegistryRepository
 from app.tool_registry.service import ToolRegistryService
+from app.web_search.client import WebSearchClient
 
 logger = logging.getLogger(__name__)
 
@@ -52,6 +53,10 @@ def get_model_gateway_client(settings: Settings = Depends(get_settings)) -> Mode
     if _model_gateway_client is None:
         _model_gateway_client = ModelGatewayClient(settings)
     return _model_gateway_client
+
+
+def get_web_search_client(settings: Settings = Depends(get_settings)) -> WebSearchClient:
+    return WebSearchClient(settings)
 
 
 def get_tool_registry_service() -> ToolRegistryService:
@@ -123,10 +128,17 @@ def get_workflow_manager(
     planner_service: PlannerService = Depends(get_planner_service),
     model_gateway_client: ModelGatewayClient = Depends(get_model_gateway_client),
     tool_executor_service: ToolExecutorService = Depends(get_tool_executor_service),
+    web_search_client: WebSearchClient = Depends(get_web_search_client),
 ) -> WorkflowManager:
     global _workflow_manager
     if _workflow_manager is None:
-        _workflow_manager = WorkflowManager(planner_service, model_gateway_client, tool_executor_service, get_tool_registry_service())
+        _workflow_manager = WorkflowManager(
+            planner_service,
+            model_gateway_client,
+            tool_executor_service,
+            get_tool_registry_service(),
+            web_search_client,
+        )
     return _workflow_manager
 
 

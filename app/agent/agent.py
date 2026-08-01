@@ -7,6 +7,7 @@ from app.agent.memory import MemoryInterface, RequestScopedMemory
 from app.agent.models import AgentDecisionAction, AgentState, AgentStatus, ReasoningContext
 from app.agent.observation import ObservationManager
 from app.agent.tool_discovery import ToolDiscovery
+from app.graph.nodes.current_info_router import CurrentInfoRouterNode
 from app.graph.nodes.response_generator import ResponseGeneratorNode
 from app.planner.planner import PlannerService
 from app.tool_executor.service import ToolExecutorService
@@ -29,6 +30,7 @@ class GeneralAgent:
         observation_manager: ObservationManager | None = None,
         memory: MemoryInterface | None = None,
         tool_discovery: ToolDiscovery | None = None,
+        current_info_router: CurrentInfoRouterNode | None = None,
     ) -> None:
         self._planner_service = planner_service
         self._tool_executor_service = tool_executor_service
@@ -37,6 +39,7 @@ class GeneralAgent:
         self._observation_manager = observation_manager or ObservationManager()
         self._memory = memory or RequestScopedMemory()
         self._tool_discovery = tool_discovery or ToolDiscovery()
+        self._current_info_router = current_info_router or CurrentInfoRouterNode()
 
     async def reason(self, state: AgentState) -> dict[str, object]:
         memory_context = await self._memory.load(state)
@@ -131,7 +134,9 @@ class GeneralAgent:
                 'model_response': answer,
                 'final_response': answer,
             }
-        return await self._response_generator_node(state)
+        web_updates = await self._current_info_router(state)
+        response_state = state.model_copy(update=web_updates) if web_updates else state
+        return await self._response_generator_node(response_state)
 
     def route_after_decision(self, state: AgentState) -> str:
         if state.decision and state.decision.action == AgentDecisionAction.REPLAN:

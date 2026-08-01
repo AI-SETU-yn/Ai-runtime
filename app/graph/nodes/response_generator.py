@@ -3,6 +3,7 @@ from typing import Any
 
 from app.graph.state import RuntimeState
 from app.model_gateway.client import ModelGatewayClient
+from app.model_gateway.exceptions import ModelGatewayError
 from app.prompts.builder import PromptBuilder
 from app.utils.json_logging import pretty_json
 from app.utils.redaction import redact_sensitive
@@ -48,21 +49,29 @@ class ResponseGeneratorNode:
             'tool_execution_result': state.tool_execution_result,
             'grounded_prompt': prompt,
         })))
-        answer = await self._model_gateway_client.generate(
-            prompt,
-            metadata={
-                'intent': planner_output.intent,
-                'requires_tool': planner_output.requires_tool,
-                'domain': planner_output.domain,
-                'service': planner_output.service,
-                'entity': planner_output.entity,
-                'operation': planner_output.operation,
-                'parameters': planner_output.parameters,
-                'tool_execution_result': state.tool_execution_result,
-                'conversation_id': state.conversation_id,
-                'trace_id': state.trace_id,
-            },
-        )
+        try:
+            answer = await self._model_gateway_client.generate(
+                prompt,
+                metadata={
+                    'intent': planner_output.intent,
+                    'requires_tool': planner_output.requires_tool,
+                    'domain': planner_output.domain,
+                    'service': planner_output.service,
+                    'entity': planner_output.entity,
+                    'operation': planner_output.operation,
+                    'parameters': planner_output.parameters,
+                    'tool_execution_result': state.tool_execution_result,
+                    'conversation_id': state.conversation_id,
+                    'trace_id': state.trace_id,
+                },
+            )
+        except ModelGatewayError:
+            answer = self._general_answer_failure_answer()
+            logger.warning('response_generator_gateway_failed_using_fallback')
+
+        if not isinstance(answer, str) or not answer.strip():
+            answer = self._general_answer_failure_answer()
+            logger.warning('response_generator_empty_answer_using_fallback')
         logger.info('final_response_json\n%s', pretty_json(redact_sensitive({'final_response': answer})))
         return {
             'model_response': answer,
@@ -84,6 +93,13 @@ class ResponseGeneratorNode:
         if detail:
             return f"I couldn't fetch the requested enterprise data. {detail}"
         return "I couldn't fetch the requested enterprise data because the tool call failed. Please try again after refreshing your session."
+
+    @staticmethod
+    def _general_answer_failure_answer() -> str:
+        return (
+            "I couldn't come up with an answer to that right now. "
+            "Please try rephrasing your question or try again in a moment."
+        )
 
     @classmethod
     def _extract_tool_error_detail(cls, value: Any) -> str | None:

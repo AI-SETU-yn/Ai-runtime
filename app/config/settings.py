@@ -86,6 +86,21 @@ class Settings(BaseSettings):
     tool_registry_path: Path = Path('tool-registry')
     guardrails_config_path: Path = Path('app/config/guardrails.yaml')
 
+    # Disabled unless both this flag and a provider URL are configured.
+    web_search_enabled: bool = False
+    web_search_url: str = ''
+    web_search_api_key: str = Field(
+        default='',
+        validation_alias=AliasChoices('WEB_SEARCH_API_KEY', 'AI_RUNTIME_WEB_SEARCH_API_KEY'),
+    )
+    web_search_max_results: int = 5
+    web_search_timeout_seconds: float = 10.0
+    web_search_connect_timeout_seconds: float = 3.0
+    web_search_read_timeout_seconds: float = 10.0
+    web_search_max_retries: int = 1
+    web_search_max_result_characters: int = 1_000
+    web_search_max_context_characters: int = 4_000
+
     @model_validator(mode='after')
     def validate_production_security(self) -> 'Settings':
         if self.environment != 'prod':
