@@ -13,6 +13,7 @@ from app.mcp_client.connection.pool import ConnectionPool
 from app.mcp_client.discovery.config_loader import ServerConfigLoader
 from app.mcp_client.models.connection import ConnectionSettings
 from app.mcp_client.utils.retry import RetryPolicy
+from app.model_gateway.adapter_resolver import ModelGatewayAdapterResolver
 from app.model_gateway.client import ModelGatewayClient
 from app.planner.parser import PlannerOutputParser
 from app.planner.planner import PlannerService
@@ -40,6 +41,7 @@ _model_gateway_client: ModelGatewayClient | None = None
 _planner_service: PlannerService | None = None
 _tool_executor_service: ToolExecutorService | None = None
 _workflow_manager: WorkflowManager | None = None
+_chat_service: ChatService | None = None
 
 
 def get_prompt_builder() -> PromptBuilder:
@@ -112,6 +114,7 @@ def get_planner_service(
             output_parser,
             model_gateway_client,
             PlannerRegistryValidator(tool_registry_service),
+            ModelGatewayAdapterResolver(tool_registry_service),
         )
     return _planner_service
 
@@ -173,11 +176,14 @@ def get_chat_service(
     guardrail_engine: GuardrailEngine = Depends(get_guardrail_engine),
     security_classifier_service: SecurityClassificationService = Depends(get_security_classifier_service),
 ) -> ChatService:
-    return ChatService(workflow_manager, guardrail_engine, security_classifier_service)
+    global _chat_service
+    if _chat_service is None:
+        _chat_service = ChatService(workflow_manager, guardrail_engine, security_classifier_service)
+    return _chat_service
 
 
 async def close_runtime_clients() -> None:
-    global _mcp_client, _model_gateway_client, _planner_service, _tool_executor_service, _workflow_manager
+    global _mcp_client, _model_gateway_client, _planner_service, _tool_executor_service, _workflow_manager, _chat_service
     global _guardrail_engine, _guardrails_config, _security_classifier_service
     close_operations = []
     if _mcp_client is not None:
@@ -196,6 +202,7 @@ async def close_runtime_clients() -> None:
     _planner_service = None
     _tool_executor_service = None
     _workflow_manager = None
+    _chat_service = None
     _guardrail_engine = None
     _guardrails_config = None
     _security_classifier_service = None

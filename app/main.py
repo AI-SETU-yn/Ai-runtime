@@ -22,6 +22,7 @@ from app.services.dependencies import (
     get_security_classifier_service,
     get_tool_registry_service,
 )
+from app.mcp_client.discovery.tool_contract_validator import ToolContractValidationError, ToolContractValidator
 from app.utils.logging import configure_logging
 
 logger = logging.getLogger(__name__)
@@ -44,7 +45,6 @@ async def lifespan(app: FastAPI):
             'planner_read_timeout_seconds': settings.model_gateway_planner_read_timeout_seconds,
             'generate_timeout_seconds': settings.model_gateway_generate_timeout_seconds,
             'generate_read_timeout_seconds': settings.model_gateway_generate_read_timeout_seconds,
-            'adapter': settings.model_gateway_adapter,
         },
     )
 
@@ -72,6 +72,17 @@ async def lifespan(app: FastAPI):
             'guardrails_config_path': str(settings.guardrails_config_path),
         },
     )
+    if settings.mcp_validate_contracts_on_startup:
+        validator = ToolContractValidator(tool_registry_service, mcp_client)
+        try:
+            await validator.validate_or_raise_async()
+        except ToolContractValidationError as exc:
+            logger.error(
+                'mcp_contract_validation_failed',
+                extra={'mismatch_count': len(exc.mismatches), 'mismatches': [mismatch.__dict__ for mismatch in exc.mismatches]},
+            )
+            raise
+        logger.info('mcp_contract_validation_completed')
 
     logger.info('workflow_ready_for_lazy_initialization')
 

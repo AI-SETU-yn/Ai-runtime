@@ -60,6 +60,32 @@ def test_loader_loads_registry(tmp_path: Path):
     assert registry.tools[0].status is ToolStatus.ACTIVE
 
 
+def test_loader_accepts_output_display_metadata(tmp_path: Path):
+    registry_file = write_registry(
+        tmp_path,
+        'vidhya/academic.yaml',
+        VALID_REGISTRY.replace(
+            'output:\n      type: json',
+            (
+                'output:\n'
+                '      type: json\n'
+                '      identifier_fields:\n'
+                '      - referenceId\n'
+                '      display_fields:\n'
+                '      - subjectName\n'
+                '      display:\n'
+                '        label_template: "{subjectName}"'
+            ),
+        ),
+    )
+
+    registry = ToolRegistryLoader().load_registry_file(registry_file)
+
+    assert registry.tools[0].output.identifier_fields == ['referenceId']
+    assert registry.tools[0].output.display_fields == ['subjectName']
+    assert registry.tools[0].output.display == {'label_template': '{subjectName}'}
+
+
 def test_repository_allows_ambiguous_lookup_keys_but_tracks_them(tmp_path: Path):
     write_registry(tmp_path, 'vidhya/academic.yaml', VALID_REGISTRY)
     write_registry(

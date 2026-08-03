@@ -1,5 +1,6 @@
-﻿from pydantic import BaseModel, Field
+from pydantic import BaseModel
 
+from app.models.execution import ExecutionState
 from app.models.planner import PlannerOutput
 from app.models.runtime import RuntimeContext
 
@@ -15,3 +16,6 @@ class RuntimeState(BaseModel):
     model_response: str | None = None
     final_response: str | None = None
     trace_id: str | None = None
+    execution_state: ExecutionState | None = None
+    resume_execution: bool = False
+    clarification_answer: str | None = None

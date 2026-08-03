@@ -67,6 +67,43 @@ class StreamableHTTPTransport(BaseTransport):
         })))
         return self._parser.parse(payload, request, latency_ms / 1000, response.status_code)
 
+    async def list_tools(self) -> list[dict[str, Any]]:
+        await self._ensure_initialized()
+        request_id = str(uuid4())
+        payload = {
+            "jsonrpc": "2.0",
+            "id": request_id,
+            "method": "tools/list",
+            "params": {},
+        }
+        response = await self._post_protocol_message(
+            payload,
+            self._protocol_headers("tools/list", protocol_version=self._session.protocol_version()),
+        )
+        self._capture_session_id(response)
+        if response.status_code in (401, 403):
+            raise AuthenticationError(f"MCP server returned {response.status_code}")
+        if response.status_code >= 500:
+            raise ServerUnavailableError(f"MCP server returned {response.status_code}")
+        if response.status_code >= 400:
+            raise MCPConnectionError(f"MCP tools/list failed with {response.status_code}")
+        rpc_payload = self._response_payload_for_id(response, request_id)
+        if not isinstance(rpc_payload, dict):
+            raise ResponseParseError("Expected MCP tools/list response object")
+        if rpc_payload.get("jsonrpc") != "2.0":
+            raise ResponseParseError("MCP tools/list response must include jsonrpc='2.0'")
+        if str(rpc_payload.get("id")) != request_id:
+            raise ResponseParseError("MCP tools/list response id does not match request id")
+        if "error" in rpc_payload:
+            raise MCPConnectionError("MCP tools/list returned a JSON-RPC error")
+        result = rpc_payload.get("result")
+        if not isinstance(result, dict):
+            raise ResponseParseError("MCP tools/list response must include a result object")
+        tools = result.get("tools")
+        if not isinstance(tools, list):
+            raise ResponseParseError("MCP tools/list result must include a tools list")
+        return [tool for tool in tools if isinstance(tool, dict)]
+
     def _headers(self, request: ToolRequest) -> dict[str, str]:
         headers = {
             "Accept": "application/json, text/event-stream",

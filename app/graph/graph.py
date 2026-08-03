@@ -5,9 +5,9 @@ from app.agent.models import AgentState
 from app.agent.tool_discovery import ToolDiscovery
 from app.graph.nodes import CurrentInfoRouterNode, ResponseGeneratorNode
 from app.graph.state import RuntimeState
+from app.model_gateway.adapter_resolver import ModelGatewayAdapterResolver
 from app.model_gateway.client import ModelGatewayClient
 from app.planner.planner import PlannerService
-from app.prompts.builder import PromptBuilder
 from app.tool_executor.service import ToolExecutorService
 from app.tool_registry.service import ToolRegistryService
 from app.web_search.client import WebSearchClient
@@ -22,7 +22,10 @@ class WorkflowManager:
         tool_registry_service: ToolRegistryService | None = None,
         web_search_client: WebSearchClient | None = None,
     ) -> None:
-        self._response_generator_node = ResponseGeneratorNode(PromptBuilder(), model_gateway_client)
+        self._response_generator_node = ResponseGeneratorNode(
+            model_gateway_client,
+            ModelGatewayAdapterResolver(tool_registry_service),
+        )
         self._general_agent = GeneralAgent(
             planner_service,
             tool_executor_service,

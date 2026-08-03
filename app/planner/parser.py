@@ -30,12 +30,16 @@ class PlannerOutputParser:
             normalized_requires_tool = self._bool_value(raw_payload.get('requires_tool'))
         if normalized_requires_tool is None:
             normalized_requires_tool = bool(tool or raw_payload.get('tool'))
-        normalized_execution_plan = (
+        normalized_execution_plan = self._execution_plan_value(
             execution_plan
-            or self._list_value(raw_payload.get('execution_plan'))
-            or self._list_value(raw_payload.get('executionPlan'))
-            or []
+            or raw_payload.get('execution_plan')
+            or raw_payload.get('executionPlan')
+            or raw_payload.get('steps')
         )
+        if normalized_execution_plan and normalized_requires_tool is not True:
+            normalized_requires_tool = True
+        if normalized_requires_tool is None:
+            normalized_requires_tool = False
         return PlannerOutput(
             intent=intent or self._str_value(raw_payload.get('intent')) or '',
             requires_tool=normalized_requires_tool,
@@ -76,13 +80,78 @@ class PlannerOutputParser:
     def _dict_value(value: Any) -> dict[str, object] | None:
         return value if isinstance(value, dict) else None
 
-    @staticmethod
-    def _list_value(value: Any) -> list[dict[str, object]] | None:
+    @classmethod
+    def _execution_plan_value(cls, value: Any) -> list[dict[str, object]]:
         if not isinstance(value, list):
-            return None
+            return []
         if not all(isinstance(item, dict) for item in value):
-            return None
-        return value
+            return []
+        return [cls._normalize_step(item) for item in value]
+
+    @classmethod
+    def _normalize_step(cls, value: dict[str, object]) -> dict[str, object]:
+        step = dict(value)
+        tool_name = step.get('tool_name') or step.get('toolName')
+        if tool_name and not step.get('tool'):
+            step['tool'] = tool_name
+        step['depends_on'] = cls._depends_on_value(step.get('depends_on') or step.get('dependsOn'))
+        bindings = (
+            step.get('parameter_bindings')
+            or step.get('parameterBindings')
+            or step.get('bindings')
+            or {}
+        )
+        step['parameter_bindings'] = cls._parameter_bindings_value(bindings)
+        return step
+
+    @staticmethod
+    def _depends_on_value(value: Any) -> list[str]:
+        if isinstance(value, str) and value.strip():
+            return [value.strip()]
+        if isinstance(value, list):
+            return [item for item in value if isinstance(item, str) and item.strip()]
+        return []
+
+    @classmethod
+    def _parameter_bindings_value(cls, value: Any) -> dict[str, object]:
+        if isinstance(value, list):
+            normalized: dict[str, object] = {}
+            for item in value:
+                if not isinstance(item, dict):
+                    continue
+                parameter = cls._binding_parameter_name(item)
+                if parameter:
+                    normalized[parameter] = cls._binding_source(item)
+            return normalized
+        if isinstance(value, dict):
+            parameter = cls._binding_parameter_name(value)
+            if parameter:
+                return {parameter: cls._binding_source(value)}
+            return value
+        return {}
+
+    @staticmethod
+    def _binding_parameter_name(value: dict[str, object]) -> str | None:
+        parameter = (
+            value.get('parameter')
+            or value.get('target_parameter')
+            or value.get('targetParameter')
+            or value.get('name')
+        )
+        return parameter if isinstance(parameter, str) and parameter.strip() else None
+
+    @staticmethod
+    def _binding_source(value: dict[str, object]) -> dict[str, object]:
+        source: dict[str, object] = {}
+        for output_key, candidates in {
+            'from_step': ('from_step', 'fromStep', 'source_step', 'sourceStep', 'step'),
+            'path': ('path', 'json_path', 'jsonPath', 'source_path', 'sourcePath'),
+        }.items():
+            for candidate in candidates:
+                if candidate in value:
+                    source[output_key] = value[candidate]
+                    break
+        return source
 
     @staticmethod
     def _bool_value(value: Any) -> bool | None:

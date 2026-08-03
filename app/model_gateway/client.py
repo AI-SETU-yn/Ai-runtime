@@ -44,21 +44,43 @@ class ModelGatewayClient:
             ),
             max_retries=settings.model_gateway_max_retries,
         )
-        self._adapter = settings.model_gateway_adapter
-        self._send_planner_prompt = getattr(settings, 'model_gateway_send_planner_prompt', False)
+        self._send_planner_prompt = getattr(settings, 'model_gateway_send_planner_prompt', True)
         self._client: httpx.AsyncClient | None = None
 
-    async def generate(self, prompt: str, *, metadata: dict[str, Any] | None = None) -> str:
+    async def generate(
+        self,
+        *,
+        messages: list[dict[str, str]],
+        tool_result: Any | None = None,
+        response_type: str | None = None,
+        generation_policy: dict[str, Any] | None = None,
+        conversation: dict[str, Any] | None = None,
+        metadata: dict[str, Any] | None = None,
+        missing_parameters: list[str] | None = None,
+        adapter: str | None = None,
+    ) -> str:
         payload = {
-            'adapter': self._adapter,
-            'prompt': prompt,
+            'adapter': adapter or '',
+            'messages': messages,
         }
+        if tool_result is not None:
+            payload['toolResult'] = tool_result
+        if response_type:
+            payload['responseType'] = response_type
+        if generation_policy:
+            payload['generationPolicy'] = generation_policy
+        if conversation:
+            payload['conversation'] = conversation
+        if metadata:
+            payload['metadata'] = metadata
+        if missing_parameters:
+            payload['missingParameters'] = missing_parameters
         body = await self._post(self._generate_config, payload, operation='generate')
         return str(body.get('response') or body.get('answer') or body.get('content') or '')
 
-    async def plan(self, query: str, *, prompt: str | None = None) -> dict[str, Any]:
+    async def plan(self, query: str, *, prompt: str | None = None, adapter: str | None = None) -> dict[str, Any]:
         payload = {
-            'adapter': self._adapter,
+            'adapter': adapter or '',
             'query': query,
         }
         if prompt and self._send_planner_prompt:
@@ -72,8 +94,6 @@ class ModelGatewayClient:
         *,
         operation: str,
     ) -> dict[str, Any]:
-        if not self._adapter:
-            raise ModelGatewayError('Model gateway adapter is not configured.')
         last_error: Exception | None = None
         url = f"{config.url.rstrip('/')}{config.path}"
         timeout = self._timeout_from_config(config)

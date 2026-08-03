@@ -6,6 +6,8 @@ from app.graph.graph import WorkflowManager
 from app.graph.state import RuntimeState
 from app.guardrails import GuardrailEngine
 from app.models.chat import ChatRequest
+from app.models.execution import ExecutionState
+from app.models.planner import PlannerOutput
 from app.models.response import ChatResponse, ConversationMetadata, GuardrailMetadata, GuardrailOutcome, SecurityMetadata
 from app.models.runtime import RuntimeContext
 from app.security.service import SecurityClassificationService
@@ -25,6 +27,7 @@ class ChatService:
         self._workflow_manager = workflow_manager
         self._guardrail_engine = guardrail_engine
         self._security_classifier_service = security_classifier_service
+        self._pending_executions: dict[str, ExecutionState] = {}
 
     async def chat(self, request: ChatRequest, runtime_context: RuntimeContext, request_id: str, correlation_id: str) -> ChatResponse:
         started_at = time.perf_counter()
@@ -44,6 +47,16 @@ class ChatService:
                 'trace_id': trace_id,
             }
         )
+        pending_execution = self._pending_executions.get(conversation_id)
+        resume_execution = pending_execution is not None and pending_execution.awaiting_input
+        execution_state = pending_execution.model_copy(deep=True) if pending_execution else None
+        user_question = input_guardrail.final_text
+        clarification_answer = None
+        planner_output = None
+        if resume_execution and execution_state:
+            user_question = execution_state.original_question or input_guardrail.final_text
+            clarification_answer = input_guardrail.final_text
+            planner_output = self._planner_output_from_execution_state(execution_state)
 
         logger.info('chat_request_json\n%s', pretty_json(redact_sensitive({
             'message': input_guardrail.final_text,
@@ -53,6 +66,7 @@ class ChatService:
             'trace_id': trace_id,
             'guardrails': self._serialize_guardrails(input_guardrail),
             'security': self._serialize_security(security_result),
+            'resume_execution': resume_execution,
             'runtime_context': runtime_context.model_dump(exclude={'jwt'}),
         })))
 
@@ -61,10 +75,15 @@ class ChatService:
             request_id=request_id,
             correlation_id=correlation_id,
             runtime_context=runtime_context,
-            user_question=input_guardrail.final_text,
+            user_question=user_question,
+            planner_output=planner_output,
             trace_id=trace_id,
+            execution_state=execution_state,
+            resume_execution=resume_execution,
+            clarification_answer=clarification_answer,
         )
         final_state = await self._workflow_manager.run(state)
+        self._update_pending_execution(conversation_id, final_state, user_question)
         output_guardrail = self._guardrail_engine.enforce_output(final_state.final_response or '')
         elapsed_ms = round((time.perf_counter() - started_at) * 1000, 2)
 
@@ -134,4 +153,37 @@ class ChatService:
             category=decision.category.value if decision else None,
             confidence=decision.confidence if decision else None,
             reason=decision.reason if decision else None,
+        )
+
+    def _update_pending_execution(self, conversation_id: str, final_state: RuntimeState, user_question: str) -> None:
+        execution_state = final_state.execution_state
+        tool_result = final_state.tool_execution_result
+        awaiting_input = isinstance(tool_result, dict) and (
+            tool_result.get('awaiting_input') is True or tool_result.get('status') == 'requires_input'
+        )
+        if awaiting_input and execution_state is not None:
+            self._pending_executions[conversation_id] = execution_state.model_copy(
+                update={'original_question': execution_state.original_question or user_question},
+                deep=True,
+            )
+            return
+        self._pending_executions.pop(conversation_id, None)
+
+    @staticmethod
+    def _planner_output_from_execution_state(execution_state: ExecutionState) -> PlannerOutput | None:
+        if execution_state.planner_output is not None:
+            return execution_state.planner_output
+        if not execution_state.execution_plan:
+            return None
+        final_step = execution_state.execution_plan[-1]
+        return PlannerOutput(
+            intent=final_step.intent or 'execution.resume',
+            requires_tool=True,
+            domain=final_step.domain,
+            service=final_step.service,
+            entity=final_step.entity,
+            operation=final_step.operation,
+            tool=final_step.tool,
+            parameters=final_step.parameters,
+            execution_plan=execution_state.execution_plan,
         )

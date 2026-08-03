@@ -23,19 +23,43 @@ class CurrentInfoRouterNode:
             or planner_output.requires_tool
             or state.tool_execution_result is not None
             or not is_current_info_query(state.user_question)
-            or self._web_search_client is None
-            or not self._web_search_client.is_configured
         ):
             return {}
+        if self._web_search_client is None or not self._web_search_client.is_configured:
+            logger.warning('current_info_web_search_unavailable')
+            return self._failure_result(
+                code='WEB_SEARCH_NOT_CONFIGURED',
+                message='Current information search is not configured.',
+            )
         try:
             evidence = await self._web_search_client.search(state.user_question)
         except WebSearchError as exc:
-            logger.warning('current_info_web_search_fallback error_code=%s', exc.code)
-            return {}
+            logger.warning('current_info_web_search_failed error_code=%s', exc.code)
+            return self._failure_result(code=exc.code, message=exc.message)
         return {
             'tool_execution_result': {
                 'success': True,
                 'status': 'ok',
                 'data': {'source': 'web_search', **evidence},
+            }
+        }
+
+    @staticmethod
+    def _failure_result(*, code: str, message: str) -> dict[str, object]:
+        return {
+            'tool_execution_result': {
+                'success': False,
+                'status': 'error',
+                'data': {
+                    'source': 'web_search',
+                    'error': {
+                        'code': code,
+                        'message': message,
+                    },
+                },
+                'error': {
+                    'code': code,
+                    'message': message,
+                },
             }
         }

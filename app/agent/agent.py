@@ -9,6 +9,7 @@ from app.agent.observation import ObservationManager
 from app.agent.tool_discovery import ToolDiscovery
 from app.graph.nodes.current_info_router import CurrentInfoRouterNode
 from app.graph.nodes.response_generator import ResponseGeneratorNode
+from app.models.execution import ExecutionState
 from app.planner.planner import PlannerService
 from app.tool_executor.service import ToolExecutorService
 from app.utils.json_logging import pretty_json
@@ -42,6 +43,17 @@ class GeneralAgent:
         self._current_info_router = current_info_router or CurrentInfoRouterNode()
 
     async def reason(self, state: AgentState) -> dict[str, object]:
+        if state.resume_execution and state.planner_output is not None:
+            logger.info('agent_reasoning_resumed_existing_plan_json\n%s', pretty_json({
+                'intent': state.planner_output.intent,
+                'pending_step_id': state.execution_state.pending_step_id if state.execution_state else None,
+                'completed_step_count': len(state.execution_state.completed_steps) if state.execution_state else 0,
+            }))
+            return {
+                'current_plan': state.planner_output,
+                'current_goal': state.current_goal or state.user_question,
+                'agent_status': AgentStatus.RUNNING,
+            }
         memory_context = await self._memory.load(state)
         reasoning_context = self._reasoning_context(state)
         prompt_message = self._planner_message(state, reasoning_context)
@@ -75,6 +87,9 @@ class GeneralAgent:
             request_id=state.request_id,
             correlation_id=state.correlation_id,
             trace_id=state.trace_id or '',
+            execution_state=state.execution_state,
+            clarification_answer=state.clarification_answer,
+            allow_clarification=True,
         )
         tool_history = [
             *state.tool_history,
@@ -86,11 +101,14 @@ class GeneralAgent:
                 'success': result.get('success') if isinstance(result, dict) else None,
             },
         ]
-        return {
+        updates: dict[str, object] = {
             'tool_execution_result': result,
             'iteration_count': state.iteration_count + 1,
             'tool_history': tool_history,
         }
+        if isinstance(result, dict) and isinstance(result.get('execution_state'), dict):
+            updates['execution_state'] = ExecutionState.model_validate(result['execution_state'])
+        return updates
 
     async def observe(self, state: AgentState) -> dict[str, object]:
         observation = self._observation_manager.from_tool_result(state)
@@ -129,11 +147,19 @@ class GeneralAgent:
 
     async def generate_final_response(self, state: AgentState) -> dict[str, object]:
         if state.decision and state.decision.action == AgentDecisionAction.ABORT:
-            answer = "I couldn't complete the request because the agent reached its maximum execution limit."
-            return {
-                'model_response': answer,
-                'final_response': answer,
-            }
+            abort_state = state.model_copy(
+                update={
+                    'tool_execution_result': {
+                        'status': 'error',
+                        'success': False,
+                        'error': {
+                            'code': 'AGENT_ABORTED',
+                            'message': state.decision.reason,
+                        },
+                    }
+                }
+            )
+            return await self._response_generator_node(abort_state)
         web_updates = await self._current_info_router(state)
         response_state = state.model_copy(update=web_updates) if web_updates else state
         return await self._response_generator_node(response_state)

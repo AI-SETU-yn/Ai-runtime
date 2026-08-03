@@ -40,6 +40,7 @@ class PlannerRegistryValidator:
                 f"- domain={target.domain} service={target.service} entity={target.entity} "
                 f"operation={target.operation} intent={self._intent_for(target)} tool={target.tool.name} "
                 f"required_parameters={target.tool.required_parameters} optional_parameters={target.tool.optional_parameters}"
+                f"{self._output_metadata_prompt_suffix(target)}"
                 f"{self._dependency_prompt_suffix(target)}"
             )
             for target in self._targets()
@@ -518,6 +519,17 @@ class PlannerRegistryValidator:
                 source = self._intent_for(source_target)
             dependency_parts.append(f"{dependency.parameter}<-{source}:{dependency.path}")
         return f" parameter_dependencies={dependency_parts}"
+
+    @staticmethod
+    def _output_metadata_prompt_suffix(target: PlannerRegistryTarget) -> str:
+        parts = []
+        if target.tool.output.identifier_fields:
+            parts.append(f'identifier_fields={target.tool.output.identifier_fields}')
+        if target.tool.output.display_fields:
+            parts.append(f'display_fields={target.tool.output.display_fields}')
+        if target.tool.output.display:
+            parts.append(f'display={target.tool.output.display}')
+        return f" output_metadata={' '.join(parts)}" if parts else ''
 
     @staticmethod
     def _intent_for(target: PlannerRegistryTarget) -> str:

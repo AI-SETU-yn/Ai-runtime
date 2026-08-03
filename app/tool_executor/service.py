@@ -18,6 +18,7 @@ from app.mcp_client.exceptions import (
     ServerUnavailableError,
 )
 from app.mcp_client.models.response import ToolResponse
+from app.models.execution import ClarificationOption, ClarificationRequest, ExecutionState
 from app.models.planner import ExecutionPlanStep, PlannerOutput
 from app.models.runtime import RuntimeContext
 from app.tool_executor.exceptions import ToolExecutionError, ToolResolutionError
@@ -28,6 +29,11 @@ from app.utils.json_logging import pretty_json
 from app.utils.redaction import redact_sensitive
 
 logger = logging.getLogger(__name__)
+
+
+class _MissingSafeDict(dict[str, Any]):
+    def __missing__(self, key: str) -> str:
+        return ''
 
 
 class ToolExecutorService:
@@ -43,6 +49,9 @@ class ToolExecutorService:
         request_id: str,
         correlation_id: str,
         trace_id: str,
+        execution_state: ExecutionState | None = None,
+        clarification_answer: str | None = None,
+        allow_clarification: bool = False,
     ) -> dict[str, Any] | None:
         if not planner_output.requires_tool:
             return None
@@ -53,6 +62,9 @@ class ToolExecutorService:
                 request_id=request_id,
                 correlation_id=correlation_id,
                 trace_id=trace_id,
+                execution_state=execution_state,
+                clarification_answer=clarification_answer,
+                allow_clarification=allow_clarification,
             )
         if not all((planner_output.domain, planner_output.service, planner_output.entity, planner_output.operation)):
             raise ToolResolutionError(
@@ -74,14 +86,40 @@ class ToolExecutorService:
             'lookup_latency_ms': lookup_latency_ms,
         }))
 
-        try:
-            self._validate_required_parameters(resolved_tool, planner_output.parameters, 'single_step')
-        except ToolExecutionError as exc:
+        parameters = dict(planner_output.parameters)
+        if (
+            execution_state
+            and execution_state.awaiting_clarification
+            and execution_state.awaiting_clarification.step_id == 'single_step'
+            and clarification_answer
+        ):
+            parameters = self._apply_clarification_answer(
+                dict(execution_state.awaiting_clarification.resolved_parameters),
+                execution_state.awaiting_clarification,
+                clarification_answer,
+            )
+        missing = self._missing_required_parameters(resolved_tool, parameters)
+        if missing:
+            if allow_clarification:
+                return self._clarification_result(
+                    step_id='single_step',
+                    resolved_tool=resolved_tool,
+                    missing_parameters=missing,
+                    parameters=parameters,
+                    options=[],
+                    steps=[],
+                    planner_output=planner_output,
+                )
+            exc = ToolExecutionError(
+                f'Execution plan step single_step is missing required parameter(s): {missing}',
+                code='MISSING_REQUIRED_PARAMETERS',
+                status_code=422,
+            )
             logger.info('tool_execution_skipped_missing_required_parameters_json\n%s', pretty_json({
                 'tool': resolved_tool.tool.name,
                 'server': resolved_tool.server,
                 'required_parameters': resolved_tool.tool.required_parameters,
-                'provided_parameters': sorted(planner_output.parameters.keys()),
+                'provided_parameters': sorted(parameters.keys()),
                 'error_code': exc.code,
             }))
             return self._dependency_error(
@@ -91,11 +129,11 @@ class ToolExecutorService:
                 details={
                     'code': exc.code,
                     'required_parameters': resolved_tool.tool.required_parameters,
-                    'provided_parameters': sorted(planner_output.parameters.keys()),
+                    'provided_parameters': sorted(parameters.keys()),
                 },
             )
 
-        mcp_arguments = self._build_arguments(planner_output.parameters, runtime_context, request_id, correlation_id, trace_id)
+        mcp_arguments = self._build_arguments(parameters, runtime_context, request_id, correlation_id, trace_id)
         mcp_context = self._build_context(runtime_context, request_id, correlation_id, trace_id)
         logger.info('tool_execution_request_json\n%s', pretty_json(redact_sensitive({
             'tool': resolved_tool.tool.name,
@@ -179,17 +217,33 @@ class ToolExecutorService:
         request_id: str,
         correlation_id: str,
         trace_id: str,
+        execution_state: ExecutionState | None = None,
+        clarification_answer: str | None = None,
+        allow_clarification: bool = False,
     ) -> dict[str, Any]:
-        step_results: dict[str, dict[str, Any]] = {}
-        ordered_results: list[dict[str, Any]] = []
+        step_results, ordered_results = self._completed_step_results(execution_state)
+        resolved_parameters: dict[str, dict[str, Any]] = (
+            {key: dict(value) for key, value in execution_state.resolved_parameters.items()}
+            if execution_state
+            else {}
+        )
         plan_order_result = self._order_plan_steps(planner_output.execution_plan)
         if isinstance(plan_order_result, dict):
             return plan_order_result
         ordered_steps = plan_order_result
+        if execution_state and execution_state.awaiting_clarification and clarification_answer:
+            pending_step_id = execution_state.awaiting_clarification.step_id
+            resolved_parameters[pending_step_id] = self._apply_clarification_answer(
+                dict(execution_state.awaiting_clarification.resolved_parameters),
+                execution_state.awaiting_clarification,
+                clarification_answer,
+            )
         logger.info('tool_execution_plan_started step_count=%s', len(ordered_steps))
 
         for index, step in enumerate(ordered_steps, start=1):
             step_id = step.step_id or f'step_{index}'
+            if step_id in step_results:
+                continue
             step_output = PlannerOutput(
                 intent=step.intent or '',
                 requires_tool=True,
@@ -204,8 +258,23 @@ class ToolExecutorService:
             )
             try:
                 resolved_tool = self._resolve_tool(step_output)
-                parameters = self._resolve_step_parameters(step, step_results)
-                self._validate_required_parameters(resolved_tool, parameters, step_id)
+                parameters = self._resolve_step_parameters(step, step_results, resolved_parameters.get(step_id))
+                resolved_parameters[step_id] = parameters
+                missing = self._missing_required_parameters(resolved_tool, parameters)
+                if missing:
+                    if allow_clarification:
+                        options = self._candidate_options(missing[0], ordered_results)
+                        return self._clarification_result(
+                            step_id=step_id,
+                            resolved_tool=resolved_tool,
+                            missing_parameters=missing,
+                            parameters=parameters,
+                            options=options,
+                            steps=ordered_results,
+                            planner_output=planner_output,
+                            resolved_parameters=resolved_parameters,
+                        )
+                    self._raise_missing_parameters(missing, step_id)
             except ToolExecutionError as exc:
                 return self._dependency_error(
                     message=exc.message,
@@ -247,6 +316,7 @@ class ToolExecutorService:
                 request_id=request_id,
                 correlation_id=correlation_id,
                 trace_id=trace_id,
+                allow_clarification=allow_clarification,
             )
             assert result is not None
             step_result = {
@@ -254,6 +324,7 @@ class ToolExecutorService:
                 'depends_on': step.depends_on,
                 'parameter_bindings': step.parameter_bindings,
                 'result': result,
+                'output_metadata': resolved_tool.tool.output.model_dump(exclude_none=True),
             }
             step_results[step_id] = result
             ordered_results.append(step_result)
@@ -385,6 +456,199 @@ class ToolExecutorService:
             'failed_step_id': step_id,
         }
 
+    @staticmethod
+    def _completed_step_results(
+        execution_state: ExecutionState | None,
+    ) -> tuple[dict[str, dict[str, Any]], list[dict[str, Any]]]:
+        if execution_state is None:
+            return {}, []
+        ordered_results = [
+            dict(step)
+            for step in execution_state.completed_steps
+            if isinstance(step, dict) and isinstance(step.get('step_id'), str)
+        ]
+        step_results = {
+            step['step_id']: step['result']
+            for step in ordered_results
+            if isinstance(step.get('result'), dict)
+        }
+        return step_results, ordered_results
+
+    @classmethod
+    def _clarification_result(
+        cls,
+        *,
+        step_id: str,
+        resolved_tool: ResolvedTool,
+        missing_parameters: list[str],
+        parameters: dict[str, Any],
+        options: list[ClarificationOption],
+        steps: list[dict[str, Any]],
+        planner_output: PlannerOutput,
+        resolved_parameters: dict[str, dict[str, Any]] | None = None,
+    ) -> dict[str, Any]:
+        clarification = ClarificationRequest(
+            step_id=step_id,
+            tool_name=resolved_tool.tool.name,
+            missing_parameters=missing_parameters,
+            question='',
+            options=options,
+            resolved_parameters=parameters,
+        )
+        execution_state = ExecutionState(
+            original_question=None,
+            planner_output=planner_output,
+            execution_plan=planner_output.execution_plan,
+            completed_steps=steps,
+            pending_step_id=step_id,
+            resolved_parameters=resolved_parameters or {step_id: parameters},
+            awaiting_clarification=clarification,
+        )
+        return {
+            'status': 'requires_input',
+            'success': None,
+            'awaiting_input': True,
+            'clarification': clarification.model_dump(),
+            'data': None,
+            'steps': steps,
+            'pending_step_id': step_id,
+            'execution_state': execution_state.model_dump(),
+        }
+
+    @classmethod
+    def _apply_clarification_answer(
+        cls,
+        parameters: dict[str, Any],
+        clarification: ClarificationRequest,
+        answer: str,
+    ) -> dict[str, Any]:
+        parsed = cls._parse_json_string(answer)
+        if isinstance(parsed, dict):
+            for parameter in clarification.missing_parameters:
+                if parameter in parsed:
+                    parameters[parameter] = parsed[parameter]
+            return parameters
+        if len(clarification.missing_parameters) != 1:
+            return parameters
+        parameters[clarification.missing_parameters[0]] = cls._match_option_value(answer, clarification.options)
+        return parameters
+
+    @staticmethod
+    def _match_option_value(answer: str, options: list[ClarificationOption]) -> Any:
+        stripped = answer.strip()
+        if stripped.isdigit():
+            index = int(stripped) - 1
+            if 0 <= index < len(options):
+                return options[index].value
+        normalized = ToolExecutorService._field_key(stripped)
+        for option in options:
+            if normalized in {
+                ToolExecutorService._field_key(option.label),
+                ToolExecutorService._field_key(str(option.value)),
+            }:
+                return option.value
+        return stripped
+
+    @classmethod
+    def _candidate_options(cls, parameter: str, ordered_results: list[dict[str, Any]]) -> list[ClarificationOption]:
+        for step in reversed(ordered_results):
+            result = step.get('result') if isinstance(step, dict) else None
+            output_metadata = step.get('output_metadata') if isinstance(step, dict) else None
+            records = cls._extract_record_list(result)
+            options = cls._options_from_records(records, output_metadata if isinstance(output_metadata, dict) else {})
+            if options:
+                return options
+        return []
+
+    @classmethod
+    def _extract_record_list(cls, value: Any) -> list[dict[str, Any]]:
+        payload_data = cls._extract_payload_data(value)
+        if isinstance(payload_data, list):
+            return [item for item in payload_data if isinstance(item, dict)]
+        if isinstance(payload_data, dict):
+            for item in payload_data.values():
+                if isinstance(item, list):
+                    return [entry for entry in item if isinstance(entry, dict)]
+        return []
+
+    @classmethod
+    def _options_from_records(
+        cls,
+        records: list[dict[str, Any]],
+        output_metadata: dict[str, Any],
+    ) -> list[ClarificationOption]:
+        options: list[ClarificationOption] = []
+        identifier_fields = cls._metadata_fields(output_metadata, 'identifier_fields', 'identifierFields')
+        if not identifier_fields:
+            return []
+        for record in records:
+            value = cls._record_identifier_value(record, identifier_fields)
+            if value in (None, ''):
+                continue
+            label = cls._record_label(record, value, output_metadata)
+            options.append(ClarificationOption(label=label, value=value))
+        return options
+
+    @classmethod
+    def _record_identifier_value(cls, record: dict[str, Any], identifier_fields: list[str]) -> Any:
+        pairs = [
+            (field, cls._record_field_value(record, field))
+            for field in identifier_fields
+        ]
+        pairs = [(field, value) for field, value in pairs if value not in (None, '')]
+        if not pairs:
+            return None
+        if len(pairs) == 1:
+            return pairs[0][1]
+        return {field: value for field, value in pairs}
+
+    @classmethod
+    def _record_field_value(cls, record: dict[str, Any], field: str) -> Any:
+        if field in record:
+            return record[field]
+        requested = cls._field_key(field)
+        for key, value in record.items():
+            if cls._field_key(str(key)) == requested:
+                return value
+        return None
+
+    @classmethod
+    def _record_label(cls, record: dict[str, Any], value: Any, output_metadata: dict[str, Any]) -> str:
+        display = output_metadata.get('display')
+        if isinstance(display, dict):
+            label_template = display.get('label_template') or display.get('labelTemplate')
+            if isinstance(label_template, str) and label_template.strip():
+                label = cls._format_label_template(label_template, record)
+                if label:
+                    return label
+        display_fields = cls._metadata_fields(output_metadata, 'display_fields', 'displayFields')
+        if not display_fields and isinstance(display, dict):
+            display_fields = cls._metadata_fields(display, 'fields', 'displayFields')
+        label_parts = [str(cls._record_field_value(record, field)) for field in display_fields]
+        label_parts = [item for item in label_parts if item not in ('None', '')]
+        return label_parts[0] if label_parts else str(value)
+
+    @staticmethod
+    def _metadata_fields(metadata: dict[str, Any], *keys: str) -> list[str]:
+        for key in keys:
+            value = metadata.get(key)
+            if isinstance(value, list):
+                return [item for item in value if isinstance(item, str) and item.strip()]
+        return []
+
+    @classmethod
+    def _format_label_template(cls, template: str, record: dict[str, Any]) -> str | None:
+        values = {
+            key: '' if value is None else value
+            for key, value in record.items()
+        }
+        try:
+            label = template.format_map(_MissingSafeDict(values))
+        except (KeyError, ValueError):
+            return None
+        stripped = label.strip()
+        return stripped or None
+
     def _resolve_tool(self, planner_output: PlannerOutput) -> ResolvedTool:
         domain = planner_output.domain or ''
         service = planner_output.service or ''
@@ -406,10 +670,14 @@ class ToolExecutorService:
         cls,
         step: ExecutionPlanStep,
         step_results: dict[str, dict[str, Any]],
+        existing_parameters: dict[str, Any] | None = None,
     ) -> dict[str, Any]:
         parameters = dict(step.parameters)
+        if existing_parameters:
+            parameters.update(existing_parameters)
         for parameter_name, binding in step.parameter_bindings.items():
-            parameters[parameter_name] = cls._resolve_binding(binding, step_results)
+            if parameter_name not in parameters or parameters[parameter_name] in (None, ''):
+                parameters[parameter_name] = cls._resolve_binding(binding, step_results)
         return parameters
 
     @classmethod
@@ -429,7 +697,7 @@ class ToolExecutorService:
                     code='INVALID_EXECUTION_PLAN',
                     status_code=422,
                 )
-            return cls._resolve_path_with_business_fallback(step_results[step_id], path)
+            return cls._resolve_path_with_payload_fallback(step_results[step_id], path)
         if isinstance(binding, str):
             match = re.fullmatch(r'\$\{(?P<step>[^.}]+)\.(?P<path>.+)\}', binding.strip())
             if match is None:
@@ -442,55 +710,64 @@ class ToolExecutorService:
                         code='INVALID_EXECUTION_PLAN',
                         status_code=422,
                     )
-                return cls._resolve_path_with_business_fallback(step_results[step_id], f"$.{match.group('path')}")
+                return cls._resolve_path_with_payload_fallback(step_results[step_id], f"$.{match.group('path')}")
         return binding
 
     @staticmethod
     def _validate_required_parameters(resolved_tool: ResolvedTool, parameters: dict[str, Any], step_id: str) -> None:
+        missing = ToolExecutorService._missing_required_parameters(resolved_tool, parameters)
+        if missing:
+            ToolExecutorService._raise_missing_parameters(missing, step_id)
+
+    @staticmethod
+    def _missing_required_parameters(resolved_tool: ResolvedTool, parameters: dict[str, Any]) -> list[str]:
         missing = [
             parameter
             for parameter in resolved_tool.tool.required_parameters
             if parameter not in parameters or parameters[parameter] in (None, '')
         ]
-        if missing:
-            raise ToolExecutionError(
-                f'Execution plan step {step_id} is missing required parameter(s): {missing}',
-                code='MISSING_REQUIRED_PARAMETERS',
-                status_code=422,
-            )
+        return missing
+
+    @staticmethod
+    def _raise_missing_parameters(missing: list[str], step_id: str) -> None:
+        raise ToolExecutionError(
+            f'Execution plan step {step_id} is missing required parameter(s): {missing}',
+            code='MISSING_REQUIRED_PARAMETERS',
+            status_code=422,
+        )
 
     @classmethod
-    def _resolve_path_with_business_fallback(cls, step_result: dict[str, Any], path: str) -> Any:
+    def _resolve_path_with_payload_fallback(cls, step_result: dict[str, Any], path: str) -> Any:
         try:
             return cls._resolve_path(step_result, path)
         except KeyError:
-            business_data = cls._extract_business_data(step_result)
+            payload_data = cls._extract_payload_data(step_result)
             try:
-                return cls._resolve_path(business_data, path)
+                return cls._resolve_path(payload_data, path)
             except KeyError:
                 if path.strip().startswith('$.data'):
-                    return cls._resolve_path(business_data, '$' + path.strip()[len('$.data'):])
+                    return cls._resolve_path(payload_data, '$' + path.strip()[len('$.data'):])
                 raise
 
     @classmethod
-    def _extract_business_data(cls, value: Any) -> Any:
+    def _extract_payload_data(cls, value: Any) -> Any:
         parsed = cls._parse_json_string(value)
         if parsed is not value:
-            return cls._extract_business_data(parsed)
+            return cls._extract_payload_data(parsed)
         if isinstance(value, dict):
             data = value.get('data')
             if isinstance(data, dict) and isinstance(data.get('content'), list):
-                extracted = [cls._extract_business_data(item) for item in data['content']]
+                extracted = [cls._extract_payload_data(item) for item in data['content']]
                 extracted = [item for item in extracted if item not in (None, '')]
                 return extracted[0] if len(extracted) == 1 else extracted
             if isinstance(value.get('content'), list):
-                extracted = [cls._extract_business_data(item) for item in value['content']]
+                extracted = [cls._extract_payload_data(item) for item in value['content']]
                 extracted = [item for item in extracted if item not in (None, '')]
                 return extracted[0] if len(extracted) == 1 else extracted
             if 'text' in value and isinstance(value['text'], str):
-                return cls._extract_business_data(value['text'])
+                return cls._extract_payload_data(value['text'])
             if data is not None:
-                return cls._extract_business_data(data)
+                return cls._extract_payload_data(data)
         return value
 
     @classmethod

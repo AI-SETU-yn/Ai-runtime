@@ -2,6 +2,7 @@ import logging
 from time import perf_counter
 
 from app.exceptions.errors import PlannerError, PlannerValidationError
+from app.model_gateway.adapter_resolver import ModelGatewayAdapterResolver
 from app.model_gateway.client import ModelGatewayClient
 from app.model_gateway.exceptions import ModelGatewayError
 from app.models.planner import PlannerOutput
@@ -23,15 +24,21 @@ class PlannerService:
         output_parser: PlannerOutputParser,
         model_gateway_client: ModelGatewayClient,
         registry_validator: PlannerRegistryValidator | None = None,
+        adapter_resolver: ModelGatewayAdapterResolver | None = None,
     ) -> None:
         self._prompt_builder = prompt_builder
         self._prompt_provider = prompt_provider
         self._output_parser = output_parser
         self._model_gateway_client = model_gateway_client
         self._registry_validator = registry_validator
+        self._adapter_resolver = adapter_resolver or ModelGatewayAdapterResolver()
 
     async def plan(self, message: str):
-        output = await self._request_plan(message, retry=False)
+        try:
+            output = await self._request_plan(message, retry=False)
+        except PlannerError:
+            logger.exception('planner_invalid_output_retrying_once')
+            output = await self._request_plan(message, retry=True)
         if self._should_retry_for_incomplete_execution_plan(output):
             logger.warning('planner_validation_retry_json\n%s', pretty_json({
                 'message': message,
@@ -70,10 +77,10 @@ class PlannerService:
 
         started = perf_counter()
         try:
-            planner_response = await self._model_gateway_client.plan(message, prompt=prompt)
+            planner_response = await self._call_model_gateway_plan(message, prompt)
         except ModelGatewayError:
             logger.exception('planner_gateway_failed_using_general_chat_fallback')
-            return self._fallback_general_chat_output()
+            return self._fallback_general_chat_output('planner_gateway_unreachable')
         latency_ms = round((perf_counter() - started) * 1000, 2)
 
         logger.info('planner_response_received latency_ms=%s', latency_ms)
@@ -87,8 +94,10 @@ class PlannerService:
             tool=planner_response.get('tool'),
             parameters=planner_response.get('parameters'),
             execution_plan=planner_response.get('execution_plan') or planner_response.get('executionPlan'),
-            requires_tool=planner_response.get('requiresTool'),
-            raw_response=planner_response.get('rawResponse'),
+            requires_tool=planner_response.get('requiresTool')
+            if 'requiresTool' in planner_response
+            else planner_response.get('requires_tool'),
+            raw_response=planner_response.get('rawResponse') or planner_response.get('raw_response'),
             adapter=planner_response.get('adapter'),
             model=planner_response.get('model'),
         )
@@ -106,6 +115,14 @@ class PlannerService:
                 'failure_reason': validation.failure_reason,
             })))
             if validation.failure_reason:
+                if self._is_registry_miss(validation.failure_reason):
+                    logger.warning('planner_registry_miss_using_general_chat_fallback_json\n%s', pretty_json(redact_sensitive({
+                        'message': message,
+                        'failure_reason': validation.failure_reason,
+                        'original_output': original_output.model_dump(),
+                        'normalized_output': validation.output.model_dump(),
+                    })))
+                    return self._fallback_general_chat_output('registry_target_not_found')
                 raise PlannerError(validation.failure_reason)
             output = validation.output
         if not output.intent:
@@ -115,12 +132,29 @@ class PlannerService:
         logger.info('planner_output_json\n%s', pretty_json(redact_sensitive(output.model_dump())))
         return output
 
+    async def _call_model_gateway_plan(self, message: str, prompt: str) -> dict:
+        adapter = self._adapter_resolver.resolve_for_planning()
+        try:
+            return await self._model_gateway_client.plan(message, prompt=prompt, adapter=adapter)
+        except TypeError as exc:
+            if 'adapter' not in str(exc):
+                raise
+            logger.debug('planner_gateway_client_adapter_argument_not_supported')
+            return await self._model_gateway_client.plan(message, prompt=prompt)
+
     @staticmethod
-    def _fallback_general_chat_output() -> PlannerOutput:
+    def _fallback_general_chat_output(reason: str = 'fallback') -> PlannerOutput:
         return PlannerOutput(
             intent='general.chat',
             requires_tool=False,
-            raw_response='fallback:planner_gateway_unreachable',
+            raw_response=f'fallback:{reason}',
+        )
+
+    @staticmethod
+    def _is_registry_miss(failure_reason: str) -> bool:
+        return (
+            'does not match any unique registered tool target' in failure_reason
+            or 'No tool found for logical lookup key' in failure_reason
         )
 
     def _should_retry_for_incomplete_execution_plan(self, output: PlannerOutput) -> bool:

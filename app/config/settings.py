@@ -25,11 +25,11 @@ class Settings(BaseSettings):
     local_user_id: str = 'developer'
     local_organization_id: str = 'yntec'
     local_branch_id: str = 'main'
-    local_app_id: str = 'vidhya'
-    local_tenant_id: str = 'yn'
-    local_locale: str = 'en-IN'
+    local_app_id: str = 'local-app'
+    local_tenant_id: str = 'local-tenant'
+    local_locale: str = 'en-US'
     local_session_id: str = 'local-session'
-    local_application_ids: list[str] = Field(default_factory=lambda: ['hrms', 'vidhya'])
+    local_application_ids: list[str] = Field(default_factory=list)
     local_roles: list[str] = Field(default_factory=lambda: ['SUPER_ADMIN'])
     local_permissions: list[str] = Field(default_factory=lambda: ['*'])
 
@@ -42,11 +42,10 @@ class Settings(BaseSettings):
     model_gateway_chat_path: str = '/generate'
     model_gateway_planner_path: str = '/planner'
     model_gateway_security_path: str = '/security/classify'
-    model_gateway_adapter: str = ''
     model_gateway_timeout_seconds: float = 30.0
     model_gateway_connect_timeout_seconds: float = 5.0
     model_gateway_read_timeout_seconds: float = 30.0
-    model_gateway_send_planner_prompt: bool = False
+    model_gateway_send_planner_prompt: bool = True
     model_gateway_planner_timeout_seconds: float = Field(
         default=30.0,
         validation_alias=AliasChoices(
@@ -83,12 +82,14 @@ class Settings(BaseSettings):
     mcp_pool_timeout_seconds: float = 5.0
     mcp_max_retries: int = 2
     mcp_verify_tls: bool = True
+    mcp_validate_contracts_on_startup: bool = False
 
     allowed_origins: list[str] = Field(default_factory=lambda: ['*'])
     log_level: str = 'INFO'
     ready_on_startup: bool = True
     tool_registry_path: Path = Path('tool-registry')
     guardrails_config_path: Path = Path('app/config/guardrails.yaml')
+    current_info_config_path: Path = Path('app/config/current_info.yaml')
 
     # Disabled unless both this flag and a provider URL are configured.
     web_search_enabled: bool = False

@@ -3,6 +3,7 @@ service: academic
 server: vidhya-mcp
 protocol: mcp
 transport: streamable-http
+adapter: academic
 tools:
 - id: vidhya.academic.academic_year.list.get_all_academic_years_by_branch_id
   name: academic.get_all_academic_years_by_branch_id
@@ -20,6 +21,10 @@ tools:
       context: VidhyaRequestContext
   output:
     type: json
+    identifier_fields:
+    - referenceId
+    display_fields:
+    - academicYear
 - id: vidhya.academic.academic_year.create.create_academic_years
   name: academic.create_academic_years
   entity: academic_year

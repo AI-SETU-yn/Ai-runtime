@@ -1,19 +1,41 @@
 """Small heuristic for questions that likely need fresh public information."""
 from __future__ import annotations
 
+from functools import lru_cache
+from pathlib import Path
 import re
 
-_CURRENT_INFO_KEYWORDS = (
-    'today', 'yesterday', 'tomorrow', 'tonight', 'current', 'currently',
-    'latest', 'recent', 'recently', 'now', 'right now', 'live', 'breaking',
-    'trending', 'news', 'headline', 'headlines', 'weather', 'forecast',
-    'temperature', 'stock price', 'share price', 'exchange rate', 'score',
-    'live score', 'match result', 'this week', 'this month', 'this year',
-)
+import yaml
+from pydantic import BaseModel, ConfigDict, Field
+
+from app.config.settings import get_settings
+
+
+class CurrentInfoDetectorConfig(BaseModel):
+    model_config = ConfigDict(extra='forbid')
+
+    keywords: list[str] = Field(default_factory=list)
+    year_context_keywords: list[str] = Field(default_factory=list)
+
+
 _YEAR_PATTERN = re.compile(r'\b(?:19|20)\d{2}\b')
 
 
-def is_current_info_query(user_question: str) -> bool:
+@lru_cache(maxsize=8)
+def load_current_info_config(path: str) -> CurrentInfoDetectorConfig:
+    config_path = Path(path)
+    payload = yaml.safe_load(config_path.read_text(encoding='utf-8')) or {}
+    return CurrentInfoDetectorConfig.model_validate(payload)
+
+
+def get_current_info_config() -> CurrentInfoDetectorConfig:
+    return load_current_info_config(str(get_settings().current_info_config_path))
+
+
+def is_current_info_query(
+    user_question: str,
+    config: CurrentInfoDetectorConfig | None = None,
+) -> bool:
     """Return whether a non-tool question appears to require current data.
 
     This function deliberately makes no routing decision. The caller must first
@@ -21,9 +43,10 @@ def is_current_info_query(user_question: str) -> bool:
     """
     if not user_question or not user_question.strip():
         return False
+    config = config or get_current_info_config()
     lowered = user_question.casefold()
-    if any(keyword in lowered for keyword in _CURRENT_INFO_KEYWORDS):
+    if any(keyword.casefold() in lowered for keyword in config.keywords):
         return True
     return bool(_YEAR_PATTERN.search(lowered)) and any(
-        word in lowered for word in ('news', 'price', 'weather', 'score', 'update', 'happening')
+        word.casefold() in lowered for word in config.year_context_keywords
     )

@@ -100,6 +100,8 @@ class ToolRegistryRepository:
                     server=registry.server,
                     protocol=registry.protocol,
                     transport=registry.transport,
+                    adapter=tool.adapter or registry.adapter,
+                    model=tool.model or registry.model,
                     tool=tool,
                 )
                 index.setdefault(key, []).append(resolved_tool)

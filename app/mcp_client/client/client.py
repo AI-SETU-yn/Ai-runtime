@@ -47,6 +47,24 @@ class MCPClient:
         logger.info('mcp_client_response_json\n%s', pretty_json(redact_sensitive(response.model_dump(by_alias=True))))
         return response
 
+    async def list_tools(self, server: str) -> list[dict[str, Any]]:
+        config = self._manager.registry.get(server)
+        logger.info('mcp_client_tools_list_started server=%s endpoint_path=%s', config.name, config.endpoint_path)
+        transport = self._factory.create_transport(config)
+
+        async def operation() -> object:
+            return await transport.list_tools()
+
+        response = await retry_async(operation, self._retry)
+        if not isinstance(response, list):
+            raise ResponseParseError('MCP tools/list returned an unexpected response type')
+        logger.info(
+            'mcp_client_tools_list_completed server=%s tool_count=%s',
+            config.name,
+            len(response),
+        )
+        return response
+
     async def health_check(self, server: str) -> HealthStatus:
         config = self._manager.registry.get(server)
         return await self._health.check(ConnectionSession(config, self._manager.pool))

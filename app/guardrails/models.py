@@ -31,6 +31,8 @@ class GuardrailRule(BaseModel):
     max_length: int | None = None
     replacement: str = '[redacted]'
     flags: list[str] = Field(default_factory=list)
+    exempt_patterns: list[str] = Field(default_factory=list)
+    exempt_context_keys: list[str] = Field(default_factory=list)
 
 
 class GuardrailStageConfig(BaseModel):

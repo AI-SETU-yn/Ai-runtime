@@ -53,11 +53,23 @@ class OutputDefinition(BaseModel):
 
     Attributes:
         type: Declared output type for the tool.
+        identifier_fields: Output fields that uniquely identify a record.
+        display_fields: Output fields that should be used when showing choices.
+        display: Optional display metadata for prompt/rendering consumers.
     """
 
     model_config = ConfigDict(extra='forbid', frozen=True)
 
     type: str
+    identifier_fields: list[str] = Field(
+        default_factory=list,
+        validation_alias=AliasChoices('identifier_fields', 'identifierFields'),
+    )
+    display_fields: list[str] = Field(
+        default_factory=list,
+        validation_alias=AliasChoices('display_fields', 'displayFields'),
+    )
+    display: dict[str, object] = Field(default_factory=dict)
 
 
 class ToolReferenceDefinition(BaseModel):
@@ -123,6 +135,8 @@ class ToolDefinition(BaseModel):
     optional_parameters: list[str] = Field(default_factory=list)
     parameter_dependencies: list[ParameterDependencyDefinition] = Field(default_factory=list)
     response_type: ResponseType
+    adapter: str | None = None
+    model: str | None = None
     version: str
     status: ToolStatus
     input: InputDefinition
@@ -157,6 +171,8 @@ class ToolRegistry(BaseModel):
     server: str
     protocol: str
     transport: str
+    adapter: str | None = None
+    model: str | None = None
     tools: list[ToolDefinition] = Field(default_factory=list)
 
     @model_validator(mode='after')
@@ -193,4 +209,6 @@ class ResolvedTool(BaseModel):
     server: str
     protocol: str
     transport: str
+    adapter: str | None = None
+    model: str | None = None
     tool: ToolDefinition

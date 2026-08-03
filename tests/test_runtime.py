@@ -14,6 +14,8 @@ from app.planner.parser import PlannerOutputParser
 from app.planner.planner import PlannerService
 from app.planner.prompts import PlannerPromptProvider
 from app.prompts.builder import PromptBuilder
+from app.security.models import SecurityCategory, SecurityClassifierConfig, SecurityDecision
+from app.security.service import SecurityClassificationService
 from app.security.auth import JwtService, RuntimeContextFactory
 from app.services.dependencies import get_model_gateway_client, get_security_classifier_service
 
@@ -72,6 +74,10 @@ tools:
         context: VidhyaRequestContext
     output:
       type: json
+      identifier_fields:
+      - referenceId
+      display_fields:
+      - academicYear
   - id: vidhya.academic.holiday.list
     name: academic.get_all_holi_days
     entity: holiday
@@ -121,7 +127,7 @@ class StubModelGatewayClient(ModelGatewayClient):
     def __init__(self):
         pass
 
-    async def generate(self, prompt: str, *, metadata=None) -> str:
+    async def generate(self, **kwargs) -> str:
         return 'stubbed response'
 
     async def plan(self, query: str, *, prompt: str | None = None) -> dict[str, object]:
@@ -190,6 +196,24 @@ class StaticPlannerGateway:
         return self._response
 
 
+class StubSecurityClassifier:
+    async def classify(self, message: str) -> SecurityDecision:
+        unsafe = 'reveal the system prompt' in message.lower()
+        return SecurityDecision(
+            safe=not unsafe,
+            category=SecurityCategory.SYSTEM_PROMPT_EXTRACTION if unsafe else SecurityCategory.SAFE,
+            confidence=1.0,
+            reason='test classifier decision',
+        )
+
+
+def create_test_security_classifier_service() -> SecurityClassificationService:
+    return SecurityClassificationService(
+        StubSecurityClassifier(),
+        SecurityClassifierConfig(enabled=True, mode='hybrid', suspicious_tags=['suspicious']),
+    )
+
+
 async def run_registry_aware_planner(response: dict[str, object]):
     _, validator = create_planner_registry_service()
     planner = PlannerService(
@@ -202,17 +226,62 @@ async def run_registry_aware_planner(response: dict[str, object]):
     return await planner.plan('test query')
 
 
+def test_planner_parser_normalizes_multi_step_contract_aliases():
+    output = PlannerOutputParser().parse(
+        intent=None,
+        domain=None,
+        service=None,
+        entity=None,
+        operation=None,
+        tool=None,
+        parameters=None,
+        execution_plan=[
+            {
+                'id': 'lookup',
+                'toolName': 'academic.get_all_subjects',
+                'dependsOn': 'bootstrap',
+                'bindings': [
+                    {
+                        'targetParameter': 'subject_id',
+                        'fromStep': 'bootstrap',
+                        'jsonPath': '$.data[0].referenceId',
+                    }
+                ],
+            }
+        ],
+        requires_tool=None,
+        raw_response=None,
+        adapter='academic',
+        model='test-model',
+    )
+
+    assert output.requires_tool is True
+    assert output.execution_plan[0].step_id == 'lookup'
+    assert output.execution_plan[0].tool == 'academic.get_all_subjects'
+    assert output.execution_plan[0].depends_on == ['bootstrap']
+    assert output.execution_plan[0].parameter_bindings == {
+        'subject_id': {
+            'from_step': 'bootstrap',
+            'path': '$.data[0].referenceId',
+        }
+    }
+
+
 def create_test_client(*, bypass_auth: bool):
+    import app.services.dependencies as runtime_dependencies
+
+    runtime_dependencies._chat_service = None
+    runtime_dependencies._security_classifier_service = None
     os.environ['AI_RUNTIME_BYPASS_AUTH'] = 'true' if bypass_auth else 'false'
     os.environ['AI_RUNTIME_TOOL_REGISTRY_PATH'] = create_test_registry()
     os.environ['AI_RUNTIME_MCP_SERVERS_CONFIG_PATH'] = create_test_mcp_servers()
-    os.environ['AI_RUNTIME_MODEL_GATEWAY_ADAPTER'] = 'academic'
     os.environ['AI_RUNTIME_GUARDRAILS_CONFIG_PATH'] = str(
         Path(__file__).resolve().parents[1] / 'app' / 'config' / 'guardrails.yaml'
     )
     get_settings.cache_clear()
     app = create_app()
     app.dependency_overrides[get_model_gateway_client] = lambda: StubModelGatewayClient()
+    app.dependency_overrides[get_security_classifier_service] = create_test_security_classifier_service
     return TestClient(app)
 
 
@@ -403,75 +472,81 @@ async def test_registry_aware_planner_normalizes_entity_plural_spacing():
 
 
 @pytest.mark.asyncio
-async def test_registry_aware_planner_rejects_invalid_entity():
-    with pytest.raises(Exception) as exc_info:
-        await run_registry_aware_planner(
-            {
-                'intent': 'academic.fee.list',
-                'domain': 'vidhya',
-                'service': 'academic',
-                'entity': 'fee',
-                'operation': 'list',
-                'parameters': {},
-                'requiresTool': True,
-                'adapter': 'academic',
-            }
-        )
+async def test_registry_aware_planner_falls_back_to_general_for_invalid_entity():
+    result = await run_registry_aware_planner(
+        {
+            'intent': 'academic.fee.list',
+            'domain': 'vidhya',
+            'service': 'academic',
+            'entity': 'fee',
+            'operation': 'list',
+            'parameters': {},
+            'requiresTool': True,
+            'adapter': 'academic',
+        }
+    )
 
-    assert 'does not match any unique registered tool target' in str(exc_info.value)
-
-
-@pytest.mark.asyncio
-async def test_registry_aware_planner_rejects_invalid_operation():
-    with pytest.raises(Exception) as exc_info:
-        await run_registry_aware_planner(
-            {
-                'intent': 'academic.holiday.remove',
-                'domain': 'vidhya',
-                'service': 'academic',
-                'entity': 'holiday',
-                'operation': 'remove',
-                'parameters': {},
-                'requiresTool': True,
-                'adapter': 'academic',
-            }
-        )
-
-    assert 'does not match any unique registered tool target' in str(exc_info.value)
+    assert result.intent == 'general.chat'
+    assert result.requires_tool is False
+    assert result.raw_response == 'fallback:registry_target_not_found'
 
 
 @pytest.mark.asyncio
-async def test_registry_aware_planner_rejects_unknown_entity():
-    with pytest.raises(Exception):
-        await run_registry_aware_planner(
-            {
-                'intent': 'academic.transport.list',
-                'domain': 'vidhya',
-                'service': 'academic',
-                'entity': 'transport',
-                'operation': 'list',
-                'parameters': {},
-                'requiresTool': True,
-                'adapter': 'academic',
-            }
-        )
+async def test_registry_aware_planner_falls_back_to_general_for_invalid_operation():
+    result = await run_registry_aware_planner(
+        {
+            'intent': 'academic.holiday.remove',
+            'domain': 'vidhya',
+            'service': 'academic',
+            'entity': 'holiday',
+            'operation': 'remove',
+            'parameters': {},
+            'requiresTool': True,
+            'adapter': 'academic',
+        }
+    )
+
+    assert result.intent == 'general.chat'
+    assert result.requires_tool is False
+    assert result.raw_response == 'fallback:registry_target_not_found'
 
 
 @pytest.mark.asyncio
-async def test_registry_aware_planner_rejects_unknown_service():
-    with pytest.raises(Exception):
-        await run_registry_aware_planner(
-            {
-                'intent': 'finance.holiday.list',
-                'domain': 'vidhya',
-                'service': 'finance',
-                'entity': 'holiday',
-                'operation': 'list',
-                'parameters': {},
-                'requiresTool': True,
-                'adapter': 'academic',
-            }
-        )
+async def test_registry_aware_planner_falls_back_to_general_for_unknown_entity():
+    result = await run_registry_aware_planner(
+        {
+            'intent': 'academic.transport.list',
+            'domain': 'vidhya',
+            'service': 'academic',
+            'entity': 'transport',
+            'operation': 'list',
+            'parameters': {},
+            'requiresTool': True,
+            'adapter': 'academic',
+        }
+    )
+
+    assert result.intent == 'general.chat'
+    assert result.requires_tool is False
+
+
+@pytest.mark.asyncio
+async def test_registry_aware_planner_falls_back_to_general_for_unknown_service():
+    result = await run_registry_aware_planner(
+        {
+            'intent': 'finance.holiday.list',
+            'domain': 'vidhya',
+            'service': 'finance',
+            'entity': 'holiday',
+            'operation': 'list',
+            'parameters': {},
+            'requiresTool': True,
+            'adapter': 'academic',
+        }
+    )
+
+    assert result.intent == 'general.chat'
+    assert result.requires_tool is False
 
 
 @pytest.mark.asyncio
@@ -585,6 +660,27 @@ async def test_registry_aware_planner_expands_single_step_dependency_from_regist
             'path': '$.data[?(@.isCurrentAcademicYear==true)].referenceId',
         }
     }
+
+
+@pytest.mark.asyncio
+async def test_registry_aware_planner_accepts_snake_case_requires_tool():
+    result = await run_registry_aware_planner(
+        {
+            'intent': 'academic.holiday.list',
+            'domain': 'vidhya',
+            'service': 'academic',
+            'entity': 'holiday',
+            'operation': 'list',
+            'parameters': {},
+            'requires_tool': True,
+            'adapter': 'academic',
+        }
+    )
+
+    assert result.requires_tool is True
+    assert len(result.execution_plan) == 2
+    assert result.execution_plan[0].entity == 'academic_year'
+    assert result.execution_plan[1].entity == 'holiday'
 
 
 @pytest.mark.asyncio
@@ -1187,8 +1283,10 @@ def test_model_gateway_client_request_contract():
             return self._payload
 
     class DummyClient:
+        is_closed = False
+
         def __init__(self, *args, **kwargs):
-            captured_timeouts.append(kwargs['timeout'])
+            pass
 
         async def __aenter__(self):
             return self
@@ -1196,7 +1294,8 @@ def test_model_gateway_client_request_contract():
         async def __aexit__(self, exc_type, exc, tb):
             return False
 
-        async def post(self, url, json):
+        async def post(self, url, json, timeout):
+            captured_timeouts.append(timeout)
             captured.append({'url': url, 'json': json})
             if url.endswith('/planner'):
                 return DummyResponse(
@@ -1228,7 +1327,6 @@ def test_model_gateway_client_request_contract():
                 'model_gateway_url': 'http://localhost:9000',
                 'model_gateway_chat_path': '/generate',
                 'model_gateway_planner_path': '/planner',
-                'model_gateway_adapter': 'academic',
                 'model_gateway_timeout_seconds': 30.0,
                 'model_gateway_connect_timeout_seconds': 5.0,
                 'model_gateway_read_timeout_seconds': 30.0,
@@ -1238,8 +1336,12 @@ def test_model_gateway_client_request_contract():
         client = ModelGatewayClient(settings)
 
         import asyncio
-        result = asyncio.run(client.generate('hello prompt', metadata={'trace_id': 't1'}))
-        planner_result = asyncio.run(client.plan('show subjects', prompt='registry prompt'))
+        result = asyncio.run(client.generate(
+            messages=[{'role': 'user', 'content': 'hello prompt'}],
+            metadata={'trace_id': 't1'},
+            adapter='academic',
+        ))
+        planner_result = asyncio.run(client.plan('show subjects', prompt='registry prompt', adapter='academic'))
     finally:
         mg_client_module.httpx.AsyncClient = original_client
 
@@ -1247,14 +1349,18 @@ def test_model_gateway_client_request_contract():
     assert planner_result['entity'] == 'subject'
     assert planner_result['operation'] == 'list'
     assert captured[0]['url'] == 'http://localhost:9000/generate'
-    assert captured[0]['json'] == {'adapter': 'academic', 'prompt': 'hello prompt'}
+    assert captured[0]['json'] == {
+        'adapter': 'academic',
+        'messages': [{'role': 'user', 'content': 'hello prompt'}],
+        'metadata': {'trace_id': 't1'},
+    }
     assert captured[1]['url'] == 'http://localhost:9000/planner'
-    assert captured[1]['json'] == {'adapter': 'academic', 'query': 'show subjects'}
+    assert captured[1]['json'] == {'adapter': 'academic', 'query': 'show subjects', 'prompt': 'registry prompt'}
     assert captured_timeouts[0].read == 90.0
     assert captured_timeouts[1].read == 30.0
 
 
-def test_model_gateway_client_can_opt_into_planner_prompt_forwarding():
+def test_model_gateway_client_can_disable_planner_prompt_forwarding_for_legacy_gateways():
     captured = []
 
     class DummyResponse:
@@ -1274,7 +1380,7 @@ def test_model_gateway_client_can_opt_into_planner_prompt_forwarding():
         async def __aexit__(self, exc_type, exc, tb):
             return False
 
-        async def post(self, url, json):
+        async def post(self, url, json, **kwargs):
             captured.append(json)
             return DummyResponse()
 
@@ -1290,22 +1396,21 @@ def test_model_gateway_client_can_opt_into_planner_prompt_forwarding():
                 'model_gateway_url': 'http://localhost:9000',
                 'model_gateway_chat_path': '/generate',
                 'model_gateway_planner_path': '/planner',
-                'model_gateway_adapter': 'academic',
                 'model_gateway_timeout_seconds': 30.0,
                 'model_gateway_connect_timeout_seconds': 5.0,
                 'model_gateway_read_timeout_seconds': 30.0,
                 'model_gateway_max_retries': 0,
-                'model_gateway_send_planner_prompt': True,
+                'model_gateway_send_planner_prompt': False,
             },
         )()
         client = ModelGatewayClient(settings)
 
         import asyncio
-        asyncio.run(client.plan('show subjects', prompt='registry prompt'))
+        asyncio.run(client.plan('show subjects', prompt='registry prompt', adapter='academic'))
     finally:
         mg_client_module.httpx.AsyncClient = original_client
 
-    assert captured == [{'adapter': 'academic', 'query': 'show subjects', 'prompt': 'registry prompt'}]
+    assert captured == [{'adapter': 'academic', 'query': 'show subjects'}]
 
 
 @pytest.mark.asyncio
@@ -1318,11 +1423,10 @@ async def test_model_gateway_client_error_mapping():
         model_gateway_url = 'http://127.0.0.1:9'
         model_gateway_chat_path = '/generate'
         model_gateway_planner_path = '/planner'
-        model_gateway_adapter = 'academic'
 
     client = ModelGatewayClient(Settings())
     with pytest.raises(Exception):
-        await client.generate('hi')
+        await client.generate(messages=[{'role': 'user', 'content': 'hi'}])
 
 
 
@@ -1457,15 +1561,19 @@ def test_tool_executor_builds_vidhya_context_from_runtime_context():
 
 
 @pytest.mark.asyncio
-async def test_response_generator_skips_model_gateway_when_tool_failed():
+async def test_response_generator_dispatches_tool_failures_to_model_gateway():
     from app.graph.nodes.response_generator import ResponseGeneratorNode
     from app.graph.state import RuntimeState
     from app.models.planner import PlannerOutput
     from app.models.runtime import RuntimeContext
 
-    class FailingModelGateway:
-        async def generate(self, prompt: str, *, metadata=None) -> str:
-            raise AssertionError('model gateway should not be called when tool execution failed')
+    class CapturingModelGateway:
+        def __init__(self) -> None:
+            self.request = None
+
+        async def generate(self, **kwargs) -> str:
+            self.request = kwargs
+            return 'The requested data could not be retrieved.'
 
     state = RuntimeState(
         conversation_id='conv-1',
@@ -1499,152 +1607,13 @@ async def test_response_generator_skips_model_gateway_when_tool_failed():
         },
     )
 
-    result = await ResponseGeneratorNode(PromptBuilder(), FailingModelGateway()).__call__(state)
+    gateway = CapturingModelGateway()
+    result = await ResponseGeneratorNode(gateway).__call__(state)
 
-    assert 'Downstream service returned HTTP 401 Unauthorized.' in result['final_response']
+    assert result['final_response'] == 'The requested data could not be retrieved.'
     assert result['model_response'] == result['final_response']
-
-
-def test_response_prompt_uses_compact_business_data_from_mcp_text_json():
-    tool_execution_result = {
-        'tool_name': 'academic.get_all_academic_years_by_branch_id',
-        'server': 'vidhya-mcp',
-        'status': 'success',
-        'success': True,
-        'response_type': 'structured',
-        'registry_lookup_latency_ms': 0.44,
-        'tool_execution_latency_ms': 1409.18,
-        'data': {
-            'content': [
-                {
-                    'type': 'text',
-                    'text': (
-                        '{"statusCode":200,"message":"Fetched academic years",'
-                        '"errors":[],"error":false,"data":['
-                        '{"academicYear":"2026-2027","monthlyDueDate":15},'
-                        '{"academicYear":"2024-2025","monthlyDueDate":12}'
-                        ']}'
-                    ),
-                }
-            ],
-            'isError': False,
-        },
-        'error': None,
-    }
-
-    prompt = PromptBuilder().build_response_prompt(
-        'Show all academic years',
-        'academic.academic_year.list',
-        True,
-        tool_execution_result,
-    )
-
-    assert (
-        'Enterprise data: [{"academicYear":"2026-2027","monthlyDueDate":15},'
-        '{"academicYear":"2024-2025","monthlyDueDate":12}]'
-    ) in prompt
-    assert 'Tool execution result' not in prompt
-    assert 'tool_execution_latency_ms' not in prompt
-    assert 'academic.get_all_academic_years_by_branch_id' not in prompt
-    assert 'statusCode' not in prompt
-
-
-def test_response_prompt_handles_already_structured_enterprise_data():
-    tool_execution_result = {
-        'success': True,
-        'data': {
-            'subjects': [
-                {'name': 'Math', 'code': 'MATH'},
-                {'name': 'Science', 'code': 'SCI'},
-            ],
-            'server': 'should-not-be-forwarded',
-        },
-        'server': 'vidhya-mcp',
-    }
-
-    prompt = PromptBuilder().build_response_prompt(
-        'Show subjects',
-        'academic.subject.list',
-        True,
-        tool_execution_result,
-    )
-
-    assert (
-        'Enterprise data: {"subjects":[{"name":"Math","code":"MATH"},'
-        '{"name":"Science","code":"SCI"}]}'
-    ) in prompt
-    assert 'should-not-be-forwarded' not in prompt
-    assert 'vidhya-mcp' not in prompt
-
-
-def test_response_prompt_preserves_business_status_fields():
-    tool_execution_result = {
-        'tool_name': 'academic.get_all_holidays',
-        'status': 'success',
-        'success': True,
-        'data': {
-            'content': [
-                {
-                    'type': 'text',
-                    'text': '{"data":[{"holidayName":"Founders Day","status":"ACTIVE"}]}',
-                }
-            ]
-        },
-    }
-
-    prompt = PromptBuilder().build_response_prompt(
-        'Show holidays',
-        'academic.holiday.list',
-        True,
-        tool_execution_result,
-    )
-
-    assert '"status":"ACTIVE"' in prompt
-    assert '"status":"success"' not in prompt
-
-
-def test_response_prompt_uses_final_plan_result_without_intermediate_steps():
-    tool_execution_result = {
-        'success': True,
-        'status': 'success',
-        'data': {
-            'content': [
-                {
-                    'type': 'text',
-                    'text': '{"data":[{"holidayName":"Founders Day"}]}',
-                }
-            ]
-        },
-        'steps': [
-            {
-                'step_id': 'step_1',
-                'result': {
-                    'data': {
-                        'content': [
-                            {
-                                'type': 'text',
-                                'text': '{"data":[{"referenceId":"year-current","isCurrentAcademicYear":true}]}',
-                            }
-                        ]
-                    }
-                },
-            }
-        ],
-    }
-
-    prompt = PromptBuilder().build_response_prompt(
-        'Give me the holidays for the current academic year.',
-        'academic.holiday.list',
-        True,
-        tool_execution_result,
-    )
-
-    assert 'Enterprise data: [{"holidayName":"Founders Day"}]' in prompt
-    assert 'year-current' not in prompt
-    assert 'isCurrentAcademicYear' not in prompt
-
-
-
+    assert gateway.request['response_type'] == 'tool_failure'
+    assert gateway.request['tool_result']['error']['data']['isError'] is True
 
 
 def test_settings_accepts_core_gateway_jwt_secret_alias(monkeypatch):

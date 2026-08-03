@@ -64,15 +64,16 @@ async def test_current_information_uses_normalized_web_evidence_before_llm():
     captured = {}
 
     class Gateway:
-        async def generate(self, prompt, *, metadata=None):
-            captured['prompt'] = prompt
+        async def generate(self, **kwargs):
+            captured.update(kwargs)
             return 'It is sunny.'
 
-    response = await ResponseGeneratorNode(PromptBuilder(), Gateway())(
+    response = await ResponseGeneratorNode(Gateway())(
         state.model_copy(update=updates)
     )
     assert response['final_response'] == 'It is sunny.'
-    assert 'USA is sunny today.' in captured['prompt']
+    assert captured['response_type'] == 'current_info'
+    assert captured['tool_result']['data']['results'][0]['content'] == 'USA is sunny today.'
 
 
 @pytest.mark.asyncio
@@ -85,10 +86,12 @@ async def test_current_information_uses_normalized_web_evidence_before_llm():
         WebSearchError('HTTP 429'),
     ],
 )
-async def test_web_failures_fall_through_to_general_llm(error):
+async def test_web_failures_return_structured_current_info_failure(error):
     client = StubSearchClient(error=error)
     updates = await CurrentInfoRouterNode(client)(make_state("What is today's weather in the USA?"))
-    assert updates == {}
+    assert updates['tool_execution_result']['success'] is False
+    assert updates['tool_execution_result']['data']['source'] == 'web_search'
+    assert updates['tool_execution_result']['error']['code'] == error.code
     assert client.calls == 1
 
 
@@ -221,21 +224,21 @@ def test_web_client_rejects_missing_or_empty_you_com_web_results(payload):
 @pytest.mark.parametrize('answer', ['', '   '])
 async def test_blank_llm_response_uses_safe_fallback(answer):
     class Gateway:
-        async def generate(self, prompt, *, metadata=None):
+        async def generate(self, **kwargs):
             return answer
 
-    result = await ResponseGeneratorNode(PromptBuilder(), Gateway())(make_state('Explain machine learning.'))
-    assert result['final_response'].startswith("I couldn't come up with an answer")
+    result = await ResponseGeneratorNode(Gateway())(make_state('Explain machine learning.'))
+    assert result['final_response'] == 'The AI service is temporarily unavailable.'
 
 
 @pytest.mark.asyncio
 async def test_llm_failure_uses_safe_fallback():
     class Gateway:
-        async def generate(self, prompt, *, metadata=None):
+        async def generate(self, **kwargs):
             raise ModelGatewayError('down')
 
-    result = await ResponseGeneratorNode(PromptBuilder(), Gateway())(make_state('Explain machine learning.'))
-    assert result['final_response'].startswith("I couldn't come up with an answer")
+    result = await ResponseGeneratorNode(Gateway())(make_state('Explain machine learning.'))
+    assert result['final_response'] == 'The AI service is temporarily unavailable.'
 
 
 @pytest.mark.asyncio
