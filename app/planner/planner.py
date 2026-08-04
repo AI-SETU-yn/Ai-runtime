@@ -79,8 +79,8 @@ class PlannerService:
         try:
             planner_response = await self._call_model_gateway_plan(message, prompt)
         except ModelGatewayError:
-            logger.exception('planner_gateway_failed_using_general_chat_fallback')
-            return self._fallback_general_chat_output('planner_gateway_unreachable')
+            logger.exception('planner_gateway_failed_using_planner_failure')
+            return self._planner_failure_output('planner_gateway_unreachable')
         latency_ms = round((perf_counter() - started) * 1000, 2)
 
         logger.info('planner_response_received latency_ms=%s', latency_ms)
@@ -116,13 +116,13 @@ class PlannerService:
             })))
             if validation.failure_reason:
                 if self._is_registry_miss(validation.failure_reason):
-                    logger.warning('planner_registry_miss_using_general_chat_fallback_json\n%s', pretty_json(redact_sensitive({
+                    logger.warning('planner_registry_miss_using_planner_failure_json\n%s', pretty_json(redact_sensitive({
                         'message': message,
                         'failure_reason': validation.failure_reason,
                         'original_output': original_output.model_dump(),
                         'normalized_output': validation.output.model_dump(),
                     })))
-                    return self._fallback_general_chat_output('registry_target_not_found')
+                    return self._planner_failure_output('registry_target_not_found')
                 raise PlannerError(validation.failure_reason)
             output = validation.output
         if not output.intent:
@@ -143,11 +143,11 @@ class PlannerService:
             return await self._model_gateway_client.plan(message, prompt=prompt)
 
     @staticmethod
-    def _fallback_general_chat_output(reason: str = 'fallback') -> PlannerOutput:
+    def _planner_failure_output(reason: str) -> PlannerOutput:
         return PlannerOutput(
-            intent='general.chat',
+            intent='planner.failure',
             requires_tool=False,
-            raw_response=f'fallback:{reason}',
+            raw_response=f'planner_failure:{reason}',
         )
 
     @staticmethod

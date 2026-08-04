@@ -11,6 +11,7 @@ from app.graph.nodes.current_info_router import CurrentInfoRouterNode
 from app.graph.nodes.response_generator import ResponseGeneratorNode
 from app.models.execution import ExecutionState
 from app.planner.planner import PlannerService
+from app.tool_executor.exceptions import ToolExecutionError
 from app.tool_executor.service import ToolExecutorService
 from app.utils.json_logging import pretty_json
 from app.utils.redaction import redact_sensitive
@@ -81,16 +82,34 @@ class GeneralAgent:
     async def act(self, state: AgentState) -> dict[str, object]:
         planner_output = state.planner_output
         assert planner_output is not None
-        result = await self._tool_executor_service.execute(
-            planner_output=planner_output,
-            runtime_context=state.runtime_context,
-            request_id=state.request_id,
-            correlation_id=state.correlation_id,
-            trace_id=state.trace_id or '',
-            execution_state=state.execution_state,
-            clarification_answer=state.clarification_answer,
-            allow_clarification=True,
-        )
+        try:
+            result = await self._tool_executor_service.execute(
+                planner_output=planner_output,
+                runtime_context=state.runtime_context,
+                request_id=state.request_id,
+                correlation_id=state.correlation_id,
+                trace_id=state.trace_id or '',
+                execution_state=state.execution_state,
+                clarification_answer=state.clarification_answer,
+                allow_clarification=True,
+            )
+        except ToolExecutionError as exc:
+            result = {
+                'status': 'error',
+                'success': False,
+                'tool_name': planner_output.tool,
+                'data': None,
+                'error': {
+                    'code': exc.code,
+                    'message': exc.message,
+                    'status_code': exc.status_code,
+                },
+            }
+            logger.warning('agent_tool_execution_failed_json\n%s', pretty_json(redact_sensitive({
+                'intent': planner_output.intent,
+                'tool_name': planner_output.tool,
+                'error': result['error'],
+            })))
         tool_history = [
             *state.tool_history,
             {

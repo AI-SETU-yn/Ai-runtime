@@ -142,6 +142,30 @@ async def test_response_generator_dispatches_tool_failure_to_gateway():
 
 
 @pytest.mark.asyncio
+async def test_response_generator_dispatches_planner_failure_to_gateway():
+    gateway = CapturingGateway('I could not determine the correct execution plan.')
+    node = ResponseGeneratorNode(gateway)
+    state = RuntimeState(
+        conversation_id='conv-1',
+        request_id='req-1',
+        correlation_id='corr-1',
+        runtime_context=RuntimeContext(subject='user-1', user_id='user-1'),
+        user_question='List unknown enterprise data',
+        planner_output=PlannerOutput(
+            intent='planner.failure',
+            requires_tool=False,
+            raw_response='planner_failure:registry_target_not_found',
+        ),
+    )
+
+    result = await node.__call__(state)
+
+    assert result['final_response'] == 'I could not determine the correct execution plan.'
+    assert gateway.requests[0]['response_type'] == 'planner_failure'
+    assert gateway.requests[0]['tool_result'] is None
+
+
+@pytest.mark.asyncio
 async def test_multi_step_response_context_contains_all_visible_step_results():
     gateway = CapturingGateway('Alpha and Beta are available.')
     node = ResponseGeneratorNode(gateway)

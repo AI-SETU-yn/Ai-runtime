@@ -155,6 +155,8 @@ class ResponseGeneratorNode:
         planner_output: PlannerOutput,
         tool_result: dict[str, object] | None,
     ) -> str:
+        if self._is_planner_failure(planner_output):
+            return 'planner_failure'
         if self._is_web_search_result(tool_result):
             return 'current_info'
         if self._tool_awaiting_input(tool_result):
@@ -168,6 +170,12 @@ class ResponseGeneratorNode:
         if planner_output.requires_tool:
             return 'enterprise'
         return 'general'
+
+    @staticmethod
+    def _is_planner_failure(planner_output: PlannerOutput) -> bool:
+        intent = planner_output.intent.strip().casefold()
+        raw_response = (planner_output.raw_response or '').strip().casefold()
+        return intent in {'planner.failure', 'planner_failure'} or raw_response.startswith('planner_failure:')
 
     @staticmethod
     def _tool_awaiting_input(tool_execution_result: dict[str, object] | None) -> bool:

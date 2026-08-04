@@ -472,7 +472,7 @@ async def test_registry_aware_planner_normalizes_entity_plural_spacing():
 
 
 @pytest.mark.asyncio
-async def test_registry_aware_planner_falls_back_to_general_for_invalid_entity():
+async def test_registry_aware_planner_returns_planner_failure_for_invalid_entity():
     result = await run_registry_aware_planner(
         {
             'intent': 'academic.fee.list',
@@ -486,13 +486,13 @@ async def test_registry_aware_planner_falls_back_to_general_for_invalid_entity()
         }
     )
 
-    assert result.intent == 'general.chat'
+    assert result.intent == 'planner.failure'
     assert result.requires_tool is False
-    assert result.raw_response == 'fallback:registry_target_not_found'
+    assert result.raw_response == 'planner_failure:registry_target_not_found'
 
 
 @pytest.mark.asyncio
-async def test_registry_aware_planner_falls_back_to_general_for_invalid_operation():
+async def test_registry_aware_planner_returns_planner_failure_for_invalid_operation():
     result = await run_registry_aware_planner(
         {
             'intent': 'academic.holiday.remove',
@@ -506,13 +506,13 @@ async def test_registry_aware_planner_falls_back_to_general_for_invalid_operatio
         }
     )
 
-    assert result.intent == 'general.chat'
+    assert result.intent == 'planner.failure'
     assert result.requires_tool is False
-    assert result.raw_response == 'fallback:registry_target_not_found'
+    assert result.raw_response == 'planner_failure:registry_target_not_found'
 
 
 @pytest.mark.asyncio
-async def test_registry_aware_planner_falls_back_to_general_for_unknown_entity():
+async def test_registry_aware_planner_returns_planner_failure_for_unknown_entity():
     result = await run_registry_aware_planner(
         {
             'intent': 'academic.transport.list',
@@ -526,12 +526,12 @@ async def test_registry_aware_planner_falls_back_to_general_for_unknown_entity()
         }
     )
 
-    assert result.intent == 'general.chat'
+    assert result.intent == 'planner.failure'
     assert result.requires_tool is False
 
 
 @pytest.mark.asyncio
-async def test_registry_aware_planner_falls_back_to_general_for_unknown_service():
+async def test_registry_aware_planner_returns_planner_failure_for_unknown_service():
     result = await run_registry_aware_planner(
         {
             'intent': 'finance.holiday.list',
@@ -545,7 +545,7 @@ async def test_registry_aware_planner_falls_back_to_general_for_unknown_service(
         }
     )
 
-    assert result.intent == 'general.chat'
+    assert result.intent == 'planner.failure'
     assert result.requires_tool is False
 
 

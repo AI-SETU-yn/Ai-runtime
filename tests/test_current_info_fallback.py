@@ -242,12 +242,13 @@ async def test_llm_failure_uses_safe_fallback():
 
 
 @pytest.mark.asyncio
-async def test_planner_gateway_failure_returns_general_chat():
+async def test_planner_gateway_failure_returns_planner_failure():
     class Gateway:
         async def plan(self, message, *, prompt=None):
             raise ModelGatewayError('down')
 
     service = PlannerService(PromptBuilder(), type('Prompts', (), {'get_prompt_template': lambda self: 'planner'})(), type('Parser', (), {})(), Gateway())
     result = await service.plan('What is the latest news?')
-    assert result.intent == 'general.chat'
+    assert result.intent == 'planner.failure'
     assert result.requires_tool is False
+    assert result.raw_response == 'planner_failure:planner_gateway_unreachable'
