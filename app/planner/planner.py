@@ -94,6 +94,7 @@ class PlannerService:
             tool=planner_response.get('tool'),
             parameters=planner_response.get('parameters'),
             execution_plan=planner_response.get('execution_plan') or planner_response.get('executionPlan'),
+            tasks=planner_response.get('tasks'),
             requires_tool=planner_response.get('requiresTool')
             if 'requiresTool' in planner_response
             else planner_response.get('requires_tool'),
