@@ -10,6 +10,7 @@ from fastapi.testclient import TestClient
 from app.config.settings import get_settings
 from app.main import create_app
 from app.model_gateway.client import ModelGatewayClient
+from app.models.planner import PlannerOutput
 from app.planner.parser import PlannerOutputParser
 from app.planner.planner import PlannerService
 from app.planner.prompts import PlannerPromptProvider
@@ -265,6 +266,113 @@ def test_planner_parser_normalizes_multi_step_contract_aliases():
             'path': '$.data[0].referenceId',
         }
     }
+
+
+
+def test_planner_parser_accepts_semantic_tasks_and_derives_legacy_fields():
+    output = PlannerOutputParser().parse(
+        intent=None,
+        domain=None,
+        service=None,
+        entity=None,
+        operation=None,
+        tool=None,
+        parameters=None,
+        tasks=[
+            {
+                'type': 'enterprise',
+                'domain': 'vidhya',
+                'service': 'academic',
+                'entity': 'holiday',
+                'operation': 'list',
+                'parameters': {'academic_year_id': 'ay-1'},
+                'requiresClarification': False,
+            }
+        ],
+        requires_tool=None,
+        raw_response=None,
+        adapter='academic',
+        model='test-model',
+    )
+
+    assert len(output.tasks) == 1
+    assert output.tasks[0].entity == 'holiday'
+    assert output.requires_tool is True
+    assert output.intent == 'academic.holiday.list'
+    assert output.execution_plan[0].entity == 'holiday'
+    assert output.execution_plan[0].operation == 'list'
+
+
+def test_planner_parser_accepts_general_semantic_tasks_without_execution_plan():
+    output = PlannerOutputParser().parse(
+        intent=None,
+        domain=None,
+        service=None,
+        entity=None,
+        operation=None,
+        tool=None,
+        parameters={'topic': 'fees'},
+        tasks=[
+            {
+                'type': 'general',
+                'parameters': {'topic': 'fees'},
+                'requiresClarification': False,
+            }
+        ],
+        requires_tool=None,
+        raw_response=None,
+        adapter='academic',
+        model='test-model',
+    )
+
+    assert output.tasks[0].type == 'general'
+    assert output.requires_tool is False
+    assert output.intent == 'general.chat'
+    assert output.execution_plan == []
+
+
+@pytest.mark.asyncio
+async def test_registry_aware_planner_wires_semantic_tasks_from_gateway_response():
+    result = await run_registry_aware_planner(
+        {
+            'tasks': [
+                {
+                    'type': 'enterprise',
+                    'domain': 'vidhya',
+                    'service': 'academic',
+                    'entity': 'academic_year',
+                    'operation': 'list',
+                    'parameters': {},
+                    'requiresClarification': False,
+                }
+            ],
+            'adapter': 'academic',
+        }
+    )
+
+    assert result.tasks[0].entity == 'academic_year'
+    assert result.requires_tool is True
+    assert result.intent == 'academic.academic_year.list'
+    assert result.execution_plan[0].operation == 'list'
+
+
+def test_planner_output_round_trips_without_mutating_execution_plan():
+    original = PlannerOutput(
+        intent='academic.holiday.list',
+        requires_tool=True,
+        domain='vidhya',
+        service='academic',
+        entity='holiday',
+        operation='list',
+    )
+    assert original.tasks == []
+    assert original.execution_plan == []
+
+    reloaded = PlannerOutput.model_validate(original.model_dump())
+
+    assert reloaded.tasks == []
+    assert reloaded.execution_plan == []
+    assert reloaded.model_dump() == original.model_dump()
 
 
 def create_test_client(*, bypass_auth: bool):
@@ -1899,3 +2007,4 @@ async def test_legacy_single_tool_output_with_and_does_not_retry():
     assert gateway.calls == 1
     assert result.intent == 'academic.academic_year.list'
     assert result.execution_plan == []
+
