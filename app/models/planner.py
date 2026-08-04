@@ -1,6 +1,6 @@
-﻿from typing import Any
+from typing import Any
 
-from pydantic import AliasChoices, BaseModel, ConfigDict, Field
+from pydantic import AliasChoices, BaseModel, ConfigDict, Field, field_validator
 
 
 class ExecutionPlanStep(BaseModel):
@@ -47,10 +47,35 @@ class ExecutionPlanStep(BaseModel):
     )
 
 
+class PlannerTask(BaseModel):
+    model_config = ConfigDict(populate_by_name=True)
+
+    type: str
+    domain: str | None = None
+    service: str | None = None
+    entity: str | None = None
+    operation: str | None = None
+    parameters: dict[str, Any] = Field(default_factory=dict)
+    requires_clarification: bool = Field(
+        default=False,
+        validation_alias=AliasChoices('requires_clarification', 'requiresClarification'),
+        serialization_alias='requiresClarification',
+    )
+
+    @field_validator('type')
+    @classmethod
+    def validate_type(cls, value: str) -> str:
+        normalized = value.strip()
+        if not normalized:
+            raise ValueError('task type must not be empty')
+        return normalized
+
+
 class PlannerOutput(BaseModel):
     model_config = ConfigDict(populate_by_name=True)
 
-    intent: str
+    tasks: list[PlannerTask] = Field(default_factory=list)
+    intent: str = ''
     requires_tool: bool = Field(default=False, validation_alias=AliasChoices('requires_tool', 'requiresTool'))
     domain: str | None = None
     service: str | None = None
