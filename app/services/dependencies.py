@@ -20,6 +20,8 @@ from app.planner.planner import PlannerService
 from app.planner.prompts import PlannerPromptProvider
 from app.planner.registry_validator import PlannerRegistryValidator
 from app.prompts.builder import PromptBuilder
+from app.rbac.client import RBACClient
+from app.rbac.service import RBACAuthorizationService
 from app.security.client import SecurityClassifierClient
 from app.security.models import SecurityClassifierConfig
 from app.security.service import SecurityClassificationService
@@ -40,6 +42,8 @@ _security_classifier_service: SecurityClassificationService | None = None
 _model_gateway_client: ModelGatewayClient | None = None
 _planner_service: PlannerService | None = None
 _tool_executor_service: ToolExecutorService | None = None
+_rbac_client: RBACClient | None = None
+_rbac_authorization_service: RBACAuthorizationService | None = None
 _workflow_manager: WorkflowManager | None = None
 _chat_service: ChatService | None = None
 
@@ -153,11 +157,34 @@ def get_tool_executor_service(
     return _tool_executor_service
 
 
+def get_rbac_client(settings: Settings = Depends(get_settings)) -> RBACClient:
+    global _rbac_client
+    if _rbac_client is None:
+        _rbac_client = RBACClient(settings)
+    return _rbac_client
+
+
+def get_rbac_authorization_service(
+    settings: Settings = Depends(get_settings),
+    rbac_client: RBACClient = Depends(get_rbac_client),
+    tool_registry_service: ToolRegistryService = Depends(get_tool_registry_service),
+) -> RBACAuthorizationService:
+    global _rbac_authorization_service
+    if _rbac_authorization_service is None:
+        _rbac_authorization_service = RBACAuthorizationService(
+            enabled=settings.rbac_enabled,
+            rbac_client=rbac_client,
+            tool_registry_service=tool_registry_service,
+        )
+    return _rbac_authorization_service
+
+
 def get_workflow_manager(
     planner_service: PlannerService = Depends(get_planner_service),
     model_gateway_client: ModelGatewayClient = Depends(get_model_gateway_client),
     tool_executor_service: ToolExecutorService = Depends(get_tool_executor_service),
     web_search_client: WebSearchClient = Depends(get_web_search_client),
+    rbac_authorization_service: RBACAuthorizationService = Depends(get_rbac_authorization_service),
 ) -> WorkflowManager:
     global _workflow_manager
     if _workflow_manager is None:
@@ -167,6 +194,7 @@ def get_workflow_manager(
             tool_executor_service,
             get_tool_registry_service(),
             web_search_client,
+            rbac_authorization_service,
         )
     return _workflow_manager
 
@@ -184,12 +212,15 @@ def get_chat_service(
 
 async def close_runtime_clients() -> None:
     global _mcp_client, _model_gateway_client, _planner_service, _tool_executor_service, _workflow_manager, _chat_service
+    global _rbac_client, _rbac_authorization_service
     global _guardrail_engine, _guardrails_config, _security_classifier_service
     close_operations = []
     if _mcp_client is not None:
         close_operations.append(_mcp_client.close())
     if _model_gateway_client is not None:
         close_operations.append(_model_gateway_client.close())
+    if _rbac_client is not None:
+        close_operations.append(_rbac_client.close())
     if close_operations:
         results = await asyncio.gather(*close_operations, return_exceptions=True)
         failures = [result for result in results if isinstance(result, Exception)]
@@ -199,6 +230,8 @@ async def close_runtime_clients() -> None:
                 logger.warning('runtime_client_shutdown_error error_type=%s error=%s', type(failure).__name__, failure)
     _mcp_client = None
     _model_gateway_client = None
+    _rbac_client = None
+    _rbac_authorization_service = None
     _planner_service = None
     _tool_executor_service = None
     _workflow_manager = None

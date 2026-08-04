@@ -8,6 +8,7 @@ from app.graph.state import RuntimeState
 from app.model_gateway.adapter_resolver import ModelGatewayAdapterResolver
 from app.model_gateway.client import ModelGatewayClient
 from app.planner.planner import PlannerService
+from app.rbac.service import RBACAuthorizationService
 from app.tool_executor.service import ToolExecutorService
 from app.tool_registry.service import ToolRegistryService
 from app.web_search.client import WebSearchClient
@@ -21,6 +22,7 @@ class WorkflowManager:
         tool_executor_service: ToolExecutorService,
         tool_registry_service: ToolRegistryService | None = None,
         web_search_client: WebSearchClient | None = None,
+        rbac_authorization_service: RBACAuthorizationService | None = None,
     ) -> None:
         self._response_generator_node = ResponseGeneratorNode(
             model_gateway_client,
@@ -32,6 +34,7 @@ class WorkflowManager:
             self._response_generator_node,
             tool_discovery=ToolDiscovery(tool_registry_service),
             current_info_router=CurrentInfoRouterNode(web_search_client),
+            rbac_authorization_service=rbac_authorization_service,
         )
         self._graph = self._build_graph()
 

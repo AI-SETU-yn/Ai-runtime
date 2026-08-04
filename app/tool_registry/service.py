@@ -44,3 +44,7 @@ class ToolRegistryService:
             An immutable resolved tool record for downstream execution.
         """
         return self._repository.find_tool(domain, service, entity, operation)
+
+    def find_tool_by_name(self, name: str) -> ResolvedTool:
+        """Resolve a tool by globally unique registry tool name."""
+        return self._repository.find_tool_by_name(name)
