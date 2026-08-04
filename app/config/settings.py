@@ -84,6 +84,16 @@ class Settings(BaseSettings):
     mcp_verify_tls: bool = True
     mcp_validate_contracts_on_startup: bool = False
 
+    rbac_enabled: bool = False
+    rbac_url: str = 'http://localhost:2001'
+    rbac_authorization_path: str = ''
+    rbac_menu_items_path: str = '/api/vidhya-rbac-service/get-menuitems'
+    rbac_timeout_seconds: float = 10.0
+    rbac_connect_timeout_seconds: float = 3.0
+    rbac_read_timeout_seconds: float = 10.0
+    rbac_max_retries: int = 1
+    rbac_fail_open: bool = False
+
     allowed_origins: list[str] = Field(default_factory=lambda: ['*'])
     log_level: str = 'INFO'
     ready_on_startup: bool = True
@@ -116,6 +126,8 @@ class Settings(BaseSettings):
             raise ValueError('AI_RUNTIME_JWT_SECRET must be configured in prod.')
         if '*' in self.allowed_origins:
             raise ValueError('AI_RUNTIME_ALLOWED_ORIGINS must not contain "*" in prod.')
+        if self.rbac_fail_open:
+            raise ValueError('AI_RUNTIME_RBAC_FAIL_OPEN must be false in prod.')
         return self
 
 

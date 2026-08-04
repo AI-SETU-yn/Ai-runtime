@@ -41,6 +41,7 @@ class ToolRegistryRepository:
         self._loader = loader or ToolRegistryLoader()
         self._registries: list[ToolRegistry] = []
         self._index: dict[ToolLookupKey, tuple[ResolvedTool, ...]] = {}
+        self._name_index: dict[str, ResolvedTool] = {}
         self._loaded = False
 
     @property
@@ -78,6 +79,7 @@ class ToolRegistryRepository:
             raise InvalidToolRegistryException(f'No registry files found in: {root_path}')
 
         index: dict[ToolLookupKey, list[ResolvedTool]] = {}
+        name_index: dict[str, ResolvedTool] = {}
         seen_ids: dict[str, str] = {}
         seen_names: dict[str, str] = {}
         tool_count = 0
@@ -105,10 +107,12 @@ class ToolRegistryRepository:
                     tool=tool,
                 )
                 index.setdefault(key, []).append(resolved_tool)
+                name_index[tool.name] = resolved_tool
 
         immutable_index = {key: tuple(tools) for key, tools in index.items()}
         self._registries = registries
         self._index = immutable_index
+        self._name_index = name_index
         self._loaded = True
         duration_ms = (perf_counter() - start) * 1000
         ambiguous_keys = self.ambiguous_keys
@@ -181,6 +185,20 @@ class ToolRegistryRepository:
             operation,
             tool.tool.id,
             tool.tool.name,
+        )
+        return tool
+
+    def find_tool_by_name(self, name: str) -> ResolvedTool:
+        tool = self._name_index.get(name)
+        if tool is None:
+            logger.warning('Tool name lookup failed name=%s', name)
+            raise ToolNotFoundException(f'No tool found for name={name}')
+        logger.info(
+            'Tool name lookup succeeded tool_id=%s tool_name=%s domain=%s service=%s',
+            tool.tool.id,
+            tool.tool.name,
+            tool.domain,
+            tool.service,
         )
         return tool
 

@@ -11,6 +11,7 @@ from app.graph.nodes.current_info_router import CurrentInfoRouterNode
 from app.graph.nodes.response_generator import ResponseGeneratorNode
 from app.models.execution import ExecutionState
 from app.planner.planner import PlannerService
+from app.rbac.service import RBACAuthorizationService
 from app.tool_executor.exceptions import ToolExecutionError
 from app.tool_executor.service import ToolExecutorService
 from app.utils.json_logging import pretty_json
@@ -33,6 +34,7 @@ class GeneralAgent:
         memory: MemoryInterface | None = None,
         tool_discovery: ToolDiscovery | None = None,
         current_info_router: CurrentInfoRouterNode | None = None,
+        rbac_authorization_service: RBACAuthorizationService | None = None,
     ) -> None:
         self._planner_service = planner_service
         self._tool_executor_service = tool_executor_service
@@ -42,6 +44,7 @@ class GeneralAgent:
         self._memory = memory or RequestScopedMemory()
         self._tool_discovery = tool_discovery or ToolDiscovery()
         self._current_info_router = current_info_router or CurrentInfoRouterNode()
+        self._rbac_authorization_service = rbac_authorization_service
 
     async def reason(self, state: AgentState) -> dict[str, object]:
         if state.resume_execution and state.planner_output is not None:
@@ -82,6 +85,37 @@ class GeneralAgent:
     async def act(self, state: AgentState) -> dict[str, object]:
         planner_output = state.planner_output
         assert planner_output is not None
+        if self._rbac_authorization_service is not None:
+            decision = await self._rbac_authorization_service.authorize_plan(
+                planner_output=planner_output,
+                runtime_context=state.runtime_context,
+                request_id=state.request_id,
+                correlation_id=state.correlation_id,
+                trace_id=state.trace_id or '',
+            )
+            if not decision.allowed:
+                result = self._rbac_authorization_service.authorization_failure_result(decision)
+                tool_history = [
+                    *state.tool_history,
+                    {
+                        'iteration': state.iteration_count + 1,
+                        'intent': planner_output.intent,
+                        'requires_tool': planner_output.requires_tool,
+                        'tool_name': result.get('tool_name'),
+                        'success': False,
+                        'authorization': 'denied',
+                    },
+                ]
+                logger.warning('agent_tool_authorization_denied_json\n%s', pretty_json(redact_sensitive({
+                    'intent': planner_output.intent,
+                    'tool_name': result.get('tool_name'),
+                    'error': result.get('error'),
+                })))
+                return {
+                    'tool_execution_result': result,
+                    'iteration_count': state.iteration_count + 1,
+                    'tool_history': tool_history,
+                }
         try:
             result = await self._tool_executor_service.execute(
                 planner_output=planner_output,

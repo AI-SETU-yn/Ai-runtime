@@ -159,6 +159,8 @@ class ResponseGeneratorNode:
             return 'planner_failure'
         if self._is_web_search_result(tool_result):
             return 'current_info'
+        if self._authorization_failed(tool_result):
+            return 'authorization_failure'
         if self._tool_awaiting_input(tool_result):
             return 'clarification'
         if self._tool_failed(tool_result):
@@ -192,6 +194,15 @@ class ResponseGeneratorNode:
             return True
         data = tool_execution_result.get('data')
         return isinstance(data, dict) and data.get('isError') is True
+
+    @staticmethod
+    def _authorization_failed(tool_execution_result: dict[str, object] | None) -> bool:
+        if not isinstance(tool_execution_result, dict):
+            return False
+        if tool_execution_result.get('response_type') == 'authorization_failure':
+            return True
+        error = tool_execution_result.get('error')
+        return isinstance(error, dict) and error.get('code') == 'AUTHORIZATION_FAILED'
 
     @staticmethod
     def _is_web_search_result(tool_execution_result: dict[str, object] | None) -> bool:
@@ -228,7 +239,7 @@ class GroundingValidator:
         enterprise_data: Any,
         response_type: str,
     ) -> bool:
-        if response_type in {'general', 'clarification', 'tool_failure', 'planner_failure'}:
+        if response_type in {'general', 'clarification', 'tool_failure', 'planner_failure', 'authorization_failure'}:
             return True
         enterprise_data = self._extract_factual_data(enterprise_data)
         if not planner_output.requires_tool or enterprise_data in (None, '', {}, []):
