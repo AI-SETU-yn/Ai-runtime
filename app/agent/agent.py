@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import logging
+from typing import Any
 
 from app.agent.decision import DecisionEngine
 from app.agent.memory import MemoryInterface, RequestScopedMemory
@@ -10,6 +11,7 @@ from app.agent.tool_discovery import ToolDiscovery
 from app.graph.nodes.current_info_router import CurrentInfoRouterNode
 from app.graph.nodes.response_generator import ResponseGeneratorNode
 from app.models.execution import ExecutionState
+from app.models.planner import ExecutionPlanStep, PlannerOutput, PlannerTask
 from app.planner.planner import PlannerService
 from app.rbac.service import RBACAuthorizationService
 from app.tool_executor.exceptions import ToolExecutionError
@@ -18,6 +20,8 @@ from app.utils.json_logging import pretty_json
 from app.utils.redaction import redact_sensitive
 
 logger = logging.getLogger(__name__)
+
+SUPPORTED_TASK_TYPES = frozenset({'enterprise'})
 
 
 class GeneralAgent:
@@ -85,9 +89,33 @@ class GeneralAgent:
     async def act(self, state: AgentState) -> dict[str, object]:
         planner_output = state.planner_output
         assert planner_output is not None
+
+        routed = self._route_tasks(planner_output)
+        if isinstance(routed, dict):
+            logger.warning('agent_task_routing_unsupported_task_type_json\n%s', pretty_json({
+                'intent': planner_output.intent,
+                'task_type': routed['error'].get('task_type'),
+            }))
+            tool_history = [
+                *state.tool_history,
+                {
+                    'iteration': state.iteration_count + 1,
+                    'intent': planner_output.intent,
+                    'requires_tool': planner_output.requires_tool,
+                    'tool_name': None,
+                    'success': False,
+                },
+            ]
+            return {
+                'tool_execution_result': routed,
+                'iteration_count': state.iteration_count + 1,
+                'tool_history': tool_history,
+            }
+        execution_target = routed
+
         if self._rbac_authorization_service is not None:
             decision = await self._rbac_authorization_service.authorize_plan(
-                planner_output=planner_output,
+                planner_output=execution_target,
                 runtime_context=state.runtime_context,
                 request_id=state.request_id,
                 correlation_id=state.correlation_id,
@@ -118,7 +146,7 @@ class GeneralAgent:
                 }
         try:
             result = await self._tool_executor_service.execute(
-                planner_output=planner_output,
+                planner_output=execution_target,
                 runtime_context=state.runtime_context,
                 request_id=state.request_id,
                 correlation_id=state.correlation_id,
@@ -131,7 +159,7 @@ class GeneralAgent:
             result = {
                 'status': 'error',
                 'success': False,
-                'tool_name': planner_output.tool,
+                'tool_name': execution_target.tool,
                 'data': None,
                 'error': {
                     'code': exc.code,
@@ -141,7 +169,7 @@ class GeneralAgent:
             }
             logger.warning('agent_tool_execution_failed_json\n%s', pretty_json(redact_sensitive({
                 'intent': planner_output.intent,
-                'tool_name': planner_output.tool,
+                'tool_name': execution_target.tool,
                 'error': result['error'],
             })))
         tool_history = [
@@ -149,7 +177,7 @@ class GeneralAgent:
             {
                 'iteration': state.iteration_count + 1,
                 'intent': planner_output.intent,
-                'requires_tool': planner_output.requires_tool,
+                'requires_tool': execution_target.requires_tool,
                 'tool_name': result.get('tool_name') if isinstance(result, dict) else None,
                 'success': result.get('success') if isinstance(result, dict) else None,
             },
@@ -162,6 +190,56 @@ class GeneralAgent:
         if isinstance(result, dict) and isinstance(result.get('execution_state'), dict):
             updates['execution_state'] = ExecutionState.model_validate(result['execution_state'])
         return updates
+
+    def _route_tasks(self, planner_output: PlannerOutput) -> PlannerOutput | dict[str, Any]:
+        """Runtime Task Router: dispatches PlannerOutput.tasks, preserving legacy behavior when absent."""
+        if not planner_output.tasks:
+            return planner_output
+
+        unsupported_task = next(
+            (task for task in planner_output.tasks if task.type.strip().casefold() not in SUPPORTED_TASK_TYPES),
+            None,
+        )
+        if unsupported_task is not None:
+            return self._unsupported_task_type_result(unsupported_task)
+
+        execution_plan = self._execution_plan_from_enterprise_tasks(planner_output.tasks)
+        return planner_output.model_copy(update={'requires_tool': True, 'execution_plan': execution_plan})
+
+    @staticmethod
+    def _execution_plan_from_enterprise_tasks(tasks: list[PlannerTask]) -> list[ExecutionPlanStep]:
+        return [
+            ExecutionPlanStep(
+                step_id=f'step_{index}',
+                intent=(
+                    f'{task.service}.{task.entity}.{task.operation}'
+                    if all((task.service, task.entity, task.operation))
+                    else None
+                ),
+                domain=task.domain,
+                service=task.service,
+                entity=task.entity,
+                operation=task.operation,
+                parameters=dict(task.parameters),
+                visible_in_response=True,
+            )
+            for index, task in enumerate(tasks, start=1)
+        ]
+
+    @staticmethod
+    def _unsupported_task_type_result(task: PlannerTask) -> dict[str, Any]:
+        return {
+            'status': 'unsupported_task_type',
+            'success': False,
+            'response_type': 'unsupported_task_type',
+            'tool_name': None,
+            'data': None,
+            'error': {
+                'code': 'UNSUPPORTED_TASK_TYPE',
+                'message': f"Runtime does not support task type '{task.type}' in this phase.",
+                'task_type': task.type,
+            },
+        }
 
     async def observe(self, state: AgentState) -> dict[str, object]:
         observation = self._observation_manager.from_tool_result(state)
