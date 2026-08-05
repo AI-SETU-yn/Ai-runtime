@@ -5,131 +5,74 @@ protocol: mcp
 transport: streamable-http
 adapter: attendance
 tools:
-- id: vidhya.attendance.daily_attendance.create.save_daily_attendance
-  name: attendance.save_daily_attendance
-  entity: daily_attendance
-  operation: create
-  description: Saves daily attendance.
-  capability: attendance.daily_attendance.create
-  required_parameters:
-  - request
-  optional_parameters: []
-  response_type: structured
-  version: 1.0.0
-  status: active
-  input:
-    schema_summary:
-      context: VidhyaRequestContext
-      request: DailyAttendanceSaveRequest
-  output:
-    type: json
-- id: vidhya.attendance.daily_attendance.list.list_daily_attendance
-  name: attendance.list_daily_attendance
-  entity: daily_attendance
-  operation: list
-  description: Fetches daily attendance sessions for the request organization and
-    branch.
-  capability: attendance.daily_attendance.list
-  required_parameters: []
-  optional_parameters: []
-  response_type: structured
-  version: 1.0.0
-  status: active
-  input:
-    schema_summary:
-      context: VidhyaRequestContext
-  output:
-    type: json
-- id: vidhya.attendance.daily_attendance_by_student.list.list_daily_attendance_by_student
-  name: attendance.list_daily_attendance_by_student
-  entity: daily_attendance_by_student
-  operation: list
-  description: Fetches daily attendance entries for a student.
-  capability: attendance.daily_attendance_by_student.list
-  required_parameters:
-  - student_id
-  optional_parameters: []
-  response_type: structured
-  version: 1.0.0
-  status: active
-  input:
-    schema_summary:
-      context: VidhyaRequestContext
-      student_id: str
-  output:
-    type: json
-- id: vidhya.attendance.daily_attendance.read.get_daily_attendance
-  name: attendance.get_daily_attendance
-  entity: daily_attendance
-  operation: read
-  description: Fetches a daily attendance session by session ID.
-  capability: attendance.daily_attendance.read
-  required_parameters:
-  - session_id
-  optional_parameters: []
-  response_type: structured
-  version: 1.0.0
-  status: active
-  input:
-    schema_summary:
-      context: VidhyaRequestContext
-      session_id: str
-  output:
-    type: json
-- id: vidhya.attendance.daily_attendance_entries.read.get_daily_attendance_entries
-  name: attendance.get_daily_attendance_entries
-  entity: daily_attendance_entries
-  operation: read
-  description: Fetches daily attendance entries for a session.
-  capability: attendance.daily_attendance_entries.read
-  required_parameters:
-  - session_id
-  optional_parameters: []
-  response_type: structured
-  version: 1.0.0
-  status: active
-  input:
-    schema_summary:
-      context: VidhyaRequestContext
-      session_id: str
-  output:
-    type: json
 - id: vidhya.attendance.device.create.create_device
   name: attendance.create_device
   entity: device
   operation: create
-  description: Creates an attendance device for the request organization and branch.
+  description: Registers an attendance capture device.
   capability: attendance.device.create
   required_parameters:
-  - request
-  optional_parameters: []
+  - integrationConfigId
+  - deviceCode
+  - deviceType
+  - status
+  optional_parameters:
+  - deviceName
+  - ipAddress
+  - macAddress
+  - firmwareVersion
+  - location
   response_type: structured
   version: 1.0.0
   status: active
   input:
     schema_summary:
+      integrationConfigId: str
+      deviceCode: str
+      deviceType: str
+      status: str
+      deviceName: str
+      ipAddress: str
+      macAddress: str
+      firmwareVersion: str
+      location: str
       context: VidhyaRequestContext
-      request: AttendanceDeviceRequest
   output:
     type: json
 - id: vidhya.attendance.device.update.update_device
   name: attendance.update_device
   entity: device
   operation: update
-  description: Updates an attendance device by ID.
+  description: Updates an attendance device, including status-only changes.
   capability: attendance.device.update
   required_parameters:
-  - id
-  - request
-  optional_parameters: []
+  - deviceId
+  - integrationConfigId
+  - deviceCode
+  - deviceType
+  - status
+  optional_parameters:
+  - deviceName
+  - ipAddress
+  - macAddress
+  - firmwareVersion
+  - location
   response_type: structured
   version: 1.0.0
   status: active
   input:
     schema_summary:
+      deviceId: str
+      integrationConfigId: str
+      deviceCode: str
+      deviceType: str
+      status: str
+      deviceName: str
+      ipAddress: str
+      macAddress: str
+      firmwareVersion: str
+      location: str
       context: VidhyaRequestContext
-      id: str
-      request: AttendanceDeviceRequest
   output:
     type: json
 - id: vidhya.attendance.device.read.get_device
@@ -139,23 +82,23 @@ tools:
   description: Fetches an attendance device by ID.
   capability: attendance.device.read
   required_parameters:
-  - id
+  - deviceId
   optional_parameters: []
   response_type: structured
   version: 1.0.0
   status: active
   input:
     schema_summary:
+      deviceId: str
       context: VidhyaRequestContext
-      id: str
   output:
     type: json
-- id: vidhya.attendance.devices.list.list_devices
+- id: vidhya.attendance.device.list.list_devices
   name: attendance.list_devices
-  entity: devices
+  entity: device
   operation: list
   description: Fetches attendance devices for the request organization and branch.
-  capability: attendance.devices.list
+  capability: attendance.device.list
   required_parameters: []
   optional_parameters: []
   response_type: structured
@@ -166,165 +109,23 @@ tools:
       context: VidhyaRequestContext
   output:
     type: json
-- id: vidhya.attendance.device_status.update.patch_device_status
-  name: attendance.patch_device_status
-  entity: device_status
-  operation: update
-  description: Updates the status of an attendance device by ID.
-  capability: attendance.device_status.update
-  required_parameters:
-  - id
-  - request
-  optional_parameters: []
-  response_type: structured
-  version: 1.0.0
-  status: active
-  input:
-    schema_summary:
-      context: VidhyaRequestContext
-      id: str
-      request: AttendanceDeviceStatusPatchRequest
-  output:
-    type: json
-- id: vidhya.attendance.employee_sessions.list.list_employee_sessions
-  name: attendance.list_employee_sessions
-  entity: employee_sessions
-  operation: list
-  description: Fetches attendance sessions for an employee.
-  capability: attendance.employee_sessions.list
-  required_parameters:
-  - employee_id
-  optional_parameters: []
-  response_type: structured
-  version: 1.0.0
-  status: active
-  input:
-    schema_summary:
-      context: VidhyaRequestContext
-      employee_id: str
-  output:
-    type: json
-- id: vidhya.attendance.all_employee_sessions.list.list_all_employee_sessions
-  name: attendance.list_all_employee_sessions
-  entity: all_employee_sessions
-  operation: list
-  description: Fetches all employee attendance sessions for the request organization
-    and branch.
-  capability: attendance.all_employee_sessions.list
-  required_parameters: []
-  optional_parameters: []
-  response_type: structured
-  version: 1.0.0
-  status: active
-  input:
-    schema_summary:
-      context: VidhyaRequestContext
-  output:
-    type: json
-- id: vidhya.attendance.employee_attendance.read.get_employee_attendance
-  name: attendance.get_employee_attendance
-  entity: employee_attendance
-  operation: read
-  description: Fetches attendance records for an employee.
-  capability: attendance.employee_attendance.read
-  required_parameters:
-  - employee_id
-  optional_parameters: []
-  response_type: structured
-  version: 1.0.0
-  status: active
-  input:
-    schema_summary:
-      context: VidhyaRequestContext
-      employee_id: str
-  output:
-    type: json
-- id: vidhya.attendance.employee_attendance.list.list_employee_attendance
-  name: attendance.list_employee_attendance
-  entity: employee_attendance
-  operation: list
-  description: Fetches employee attendance records for the request organization and
-    branch.
-  capability: attendance.employee_attendance.list
-  required_parameters: []
-  optional_parameters: []
-  response_type: structured
-  version: 1.0.0
-  status: active
-  input:
-    schema_summary:
-      context: VidhyaRequestContext
-  output:
-    type: json
-- id: vidhya.attendance.employee_attendance.update.override_employee_attendance
-  name: attendance.override_employee_attendance
-  entity: employee_attendance_override
-  operation: update
-  description: Overrides attendance for an employee.
-  capability: attendance.employee_attendance_override.update
-  required_parameters:
-  - employee_id
-  - request
-  optional_parameters: []
-  response_type: structured
-  version: 1.0.0
-  status: active
-  input:
-    schema_summary:
-      context: VidhyaRequestContext
-      employee_id: str
-      request: EmployeeAttendanceOverrideRequest
-  output:
-    type: json
-- id: vidhya.attendance.employee_attendance.update.recalculate_employee_attendance
-  name: attendance.recalculate_employee_attendance
-  entity: employee_attendance_recalculation
-  operation: update
-  description: Recalculates attendance for an employee.
-  capability: attendance.employee_attendance_recalculation.update
-  required_parameters:
-  - employee_id
-  optional_parameters: []
-  response_type: structured
-  version: 1.0.0
-  status: active
-  input:
-    schema_summary:
-      context: VidhyaRequestContext
-      employee_id: str
-  output:
-    type: json
-- id: vidhya.attendance.event.create.ingest_event
-  name: attendance.ingest_event
-  entity: event
-  operation: create
-  description: Ingests an attendance event.
-  capability: attendance.event.create
-  required_parameters:
-  - request
-  optional_parameters: []
-  response_type: structured
-  version: 1.0.0
-  status: active
-  input:
-    schema_summary:
-      context: VidhyaRequestContext
-      request: AttendanceEventIngestRequest
-  output:
-    type: json
-- id: vidhya.attendance.events.list.list_events
+- id: vidhya.attendance.event.list.list_events
   name: attendance.list_events
-  entity: events
+  entity: event
   operation: list
-  description: Fetches attendance events for the request organization and branch.
-  capability: attendance.events.list
+  description: Fetches attendance events, optionally filtered by student or device.
+  capability: attendance.event.list
   required_parameters: []
-  optional_parameters: []
+  optional_parameters:
+  - studentId
+  - deviceId
   response_type: structured
   version: 1.0.0
   status: active
   input:
     schema_summary:
+      studentId: str
+      deviceId: str
       context: VidhyaRequestContext
   output:
     type: json
@@ -335,58 +136,23 @@ tools:
   description: Fetches an attendance event by ID.
   capability: attendance.event.read
   required_parameters:
-  - id
+  - eventId
   optional_parameters: []
   response_type: structured
   version: 1.0.0
   status: active
   input:
     schema_summary:
+      eventId: str
       context: VidhyaRequestContext
-      id: str
-  output:
-    type: json
-- id: vidhya.attendance.events_by_person.list.list_events_by_person
-  name: attendance.list_events_by_person
-  entity: events_by_person
-  operation: list
-  description: Fetches attendance events for a person.
-  capability: attendance.events_by_person.list
-  required_parameters:
-  - person_id
-  optional_parameters: []
-  response_type: structured
-  version: 1.0.0
-  status: active
-  input:
-    schema_summary:
-      context: VidhyaRequestContext
-      person_id: str
-  output:
-    type: json
-- id: vidhya.attendance.events_by_device.list.list_events_by_device
-  name: attendance.list_events_by_device
-  entity: events_by_device
-  operation: list
-  description: Fetches attendance events for a device.
-  capability: attendance.events_by_device.list
-  required_parameters:
-  - device_id
-  optional_parameters: []
-  response_type: structured
-  version: 1.0.0
-  status: active
-  input:
-    schema_summary:
-      context: VidhyaRequestContext
-      device_id: str
   output:
     type: json
 - id: vidhya.attendance.failed_events.list.list_failed_events
   name: attendance.list_failed_events
   entity: failed_events
   operation: list
-  description: Fetches failed attendance events for the request organization and branch.
+  description: Fetches attendance events that failed processing for the request organization
+    and branch.
   capability: attendance.failed_events.list
   required_parameters: []
   optional_parameters: []
@@ -402,18 +168,24 @@ tools:
   name: attendance.create_identity_mapping
   entity: identity_mapping
   operation: create
-  description: Creates an attendance identity mapping.
+  description: Maps a student to a device identifier.
   capability: attendance.identity_mapping.create
   required_parameters:
-  - request
+  - studentId
+  - externalIdentifier
+  - identifierType
+  - status
   optional_parameters: []
   response_type: structured
   version: 1.0.0
   status: active
   input:
     schema_summary:
+      studentId: str
+      externalIdentifier: str
+      identifierType: str
+      status: str
       context: VidhyaRequestContext
-      request: AttendanceIdentityMappingRequest
   output:
     type: json
 - id: vidhya.attendance.identity_mappings.create.bulk_upsert_identity_mappings
@@ -423,35 +195,41 @@ tools:
   description: Creates or updates attendance identity mappings in bulk.
   capability: attendance.identity_mappings.create
   required_parameters:
-  - request
+  - records
   optional_parameters: []
   response_type: structured
   version: 1.0.0
   status: active
   input:
     schema_summary:
+      records: list[dict[str, Any]]
       context: VidhyaRequestContext
-      request: list[dict[str, Any]]
   output:
     type: json
 - id: vidhya.attendance.identity_mapping.update.update_identity_mapping
   name: attendance.update_identity_mapping
   entity: identity_mapping
   operation: update
-  description: Updates an attendance identity mapping by ID.
+  description: Updates an attendance identity mapping, including status-only changes.
   capability: attendance.identity_mapping.update
   required_parameters:
-  - id
-  - request
+  - identityMappingId
+  - studentId
+  - externalIdentifier
+  - identifierType
+  - status
   optional_parameters: []
   response_type: structured
   version: 1.0.0
   status: active
   input:
     schema_summary:
+      identityMappingId: str
+      studentId: str
+      externalIdentifier: str
+      identifierType: str
+      status: str
       context: VidhyaRequestContext
-      id: str
-      request: AttendanceIdentityMappingRequest
   output:
     type: json
 - id: vidhya.attendance.identity_mapping.read.get_identity_mapping
@@ -461,108 +239,91 @@ tools:
   description: Fetches an attendance identity mapping by ID.
   capability: attendance.identity_mapping.read
   required_parameters:
-  - id
+  - identityMappingId
   optional_parameters: []
   response_type: structured
   version: 1.0.0
   status: active
   input:
     schema_summary:
+      identityMappingId: str
       context: VidhyaRequestContext
-      id: str
   output:
     type: json
-- id: vidhya.attendance.identity_mappings.list.list_identity_mappings
+- id: vidhya.attendance.identity_mapping.list.list_identity_mappings
   name: attendance.list_identity_mappings
-  entity: identity_mappings
+  entity: identity_mapping
   operation: list
-  description: Fetches attendance identity mappings for the request organization and
-    branch.
-  capability: attendance.identity_mappings.list
+  description: Fetches attendance identity mappings, optionally filtered by student.
+  capability: attendance.identity_mapping.list
   required_parameters: []
-  optional_parameters: []
+  optional_parameters:
+  - studentId
   response_type: structured
   version: 1.0.0
   status: active
   input:
     schema_summary:
+      studentId: str
       context: VidhyaRequestContext
-  output:
-    type: json
-- id: vidhya.attendance.identity_mappings_by_person.list.list_identity_mappings_by_person
-  name: attendance.list_identity_mappings_by_person
-  entity: identity_mappings_by_person
-  operation: list
-  description: Fetches attendance identity mappings for a person.
-  capability: attendance.identity_mappings_by_person.list
-  required_parameters:
-  - person_id
-  optional_parameters: []
-  response_type: structured
-  version: 1.0.0
-  status: active
-  input:
-    schema_summary:
-      context: VidhyaRequestContext
-      person_id: str
-  output:
-    type: json
-- id: vidhya.attendance.identity_mapping_status.update.patch_identity_mapping_status
-  name: attendance.patch_identity_mapping_status
-  entity: identity_mapping_status
-  operation: update
-  description: Updates the status of an attendance identity mapping by ID.
-  capability: attendance.identity_mapping_status.update
-  required_parameters:
-  - id
-  - request
-  optional_parameters: []
-  response_type: structured
-  version: 1.0.0
-  status: active
-  input:
-    schema_summary:
-      context: VidhyaRequestContext
-      id: str
-      request: AttendanceIdentityMappingStatusPatchRequest
   output:
     type: json
 - id: vidhya.attendance.integration.create.create_integration
   name: attendance.create_integration
   entity: integration
   operation: create
-  description: Creates an attendance integration.
+  description: Registers a vendor or source attendance integration.
   capability: attendance.integration.create
   required_parameters:
-  - request
-  optional_parameters: []
+  - integrationName
+  - integrationType
+  - identifierField
+  - timestampField
+  - sourceType
+  optional_parameters:
+  - eventTypeField
   response_type: structured
   version: 1.0.0
   status: active
   input:
     schema_summary:
+      integrationName: str
+      integrationType: str
+      identifierField: str
+      timestampField: str
+      sourceType: str
+      eventTypeField: str
       context: VidhyaRequestContext
-      request: AttendanceIntegrationRequest
   output:
     type: json
 - id: vidhya.attendance.integration.update.update_integration
   name: attendance.update_integration
   entity: integration
   operation: update
-  description: Updates an attendance integration by ID.
+  description: Updates an attendance integration, including status-only changes.
   capability: attendance.integration.update
   required_parameters:
-  - id
-  - request
-  optional_parameters: []
+  - integrationId
+  - integrationName
+  - integrationType
+  - identifierField
+  - timestampField
+  - sourceType
+  optional_parameters:
+  - eventTypeField
   response_type: structured
   version: 1.0.0
   status: active
   input:
     schema_summary:
+      integrationId: str
+      integrationName: str
+      integrationType: str
+      identifierField: str
+      timestampField: str
+      sourceType: str
+      eventTypeField: str
       context: VidhyaRequestContext
-      id: str
-      request: AttendanceIntegrationRequest
   output:
     type: json
 - id: vidhya.attendance.integration.read.get_integration
@@ -572,23 +333,23 @@ tools:
   description: Fetches an attendance integration by ID.
   capability: attendance.integration.read
   required_parameters:
-  - id
+  - integrationId
   optional_parameters: []
   response_type: structured
   version: 1.0.0
   status: active
   input:
     schema_summary:
+      integrationId: str
       context: VidhyaRequestContext
-      id: str
   output:
     type: json
-- id: vidhya.attendance.integrations.list.list_integrations
+- id: vidhya.attendance.integration.list.list_integrations
   name: attendance.list_integrations
-  entity: integrations
+  entity: integration
   operation: list
   description: Fetches attendance integrations for the request organization and branch.
-  capability: attendance.integrations.list
+  capability: attendance.integration.list
   required_parameters: []
   optional_parameters: []
   response_type: structured
@@ -599,15 +360,56 @@ tools:
       context: VidhyaRequestContext
   output:
     type: json
-- id: vidhya.attendance.integration_status.update.patch_integration_status
-  name: attendance.patch_integration_status
-  entity: integration_status
-  operation: update
-  description: Updates the status of an attendance integration by ID.
-  capability: attendance.integration_status.update
+- id: vidhya.attendance.attendance_mode_configuration.create.create_attendance_mode_configuration
+  name: attendance.create_attendance_mode_configuration
+  entity: attendance_mode_configuration
+  operation: create
+  description: Sets the active attendance mode (daily or period) for an academic
+    year, deactivating any other active configuration.
+  capability: attendance.attendance_mode_configuration.create
   required_parameters:
-  - id
-  - request
+  - academicYearId
+  - attendanceMode
+  optional_parameters: []
+  response_type: structured
+  version: 1.0.0
+  status: active
+  input:
+    schema_summary:
+      academicYearId: str
+      attendanceMode: str
+      context: VidhyaRequestContext
+  output:
+    type: json
+- id: vidhya.attendance.attendance_mode_configuration.read.get_attendance_mode_configuration
+  name: attendance.get_attendance_mode_configuration
+  entity: attendance_mode_configuration
+  operation: read
+  description: Fetches an attendance mode configuration by configuration ID or by
+    academic year.
+  capability: attendance.attendance_mode_configuration.read
+  required_parameters: []
+  optional_parameters:
+  - configurationId
+  - academicYearId
+  response_type: structured
+  version: 1.0.0
+  status: active
+  input:
+    schema_summary:
+      configurationId: str
+      academicYearId: str
+      context: VidhyaRequestContext
+  output:
+    type: json
+- id: vidhya.attendance.attendance_mode_configuration.list.list_attendance_mode_configurations
+  name: attendance.list_attendance_mode_configurations
+  entity: attendance_mode_configuration
+  operation: list
+  description: Fetches attendance mode configuration history for the request organization
+    and branch.
+  capability: attendance.attendance_mode_configuration.list
+  required_parameters: []
   optional_parameters: []
   response_type: structured
   version: 1.0.0
@@ -615,61 +417,222 @@ tools:
   input:
     schema_summary:
       context: VidhyaRequestContext
-      id: str
-      request: AttendanceIntegrationStatusPatchRequest
+  output:
+    type: json
+- id: vidhya.attendance.daily_attendance.create.save_daily_attendance
+  name: attendance.save_daily_attendance
+  entity: daily_attendance
+  operation: create
+  description: Saves daily attendance for a class section, creating the session
+    if absent and triggering summary recalculation.
+  capability: attendance.daily_attendance.create
+  required_parameters:
+  - academicYearId
+  - classId
+  - sectionId
+  - attendanceDate
+  - entries
+  optional_parameters: []
+  response_type: structured
+  version: 1.0.0
+  status: active
+  input:
+    schema_summary:
+      academicYearId: str
+      classId: str
+      sectionId: str
+      attendanceDate: str
+      entries: list[dict[str, Any]]
+      context: VidhyaRequestContext
+  output:
+    type: json
+- id: vidhya.attendance.daily_attendance.list.list_daily_attendance
+  name: attendance.list_daily_attendance
+  entity: daily_attendance
+  operation: list
+  description: Fetches daily attendance sessions for an academic year, optionally
+    filtered by class, section, or date.
+  capability: attendance.daily_attendance.list
+  required_parameters:
+  - academicYearId
+  optional_parameters:
+  - classId
+  - sectionId
+  - attendanceDate
+  response_type: structured
+  version: 1.0.0
+  status: active
+  input:
+    schema_summary:
+      academicYearId: str
+      classId: str
+      sectionId: str
+      attendanceDate: str
+      context: VidhyaRequestContext
+  output:
+    type: json
+- id: vidhya.attendance.daily_attendance_entry.list.list_daily_attendance_entries_by_student
+  name: attendance.list_daily_attendance_entries_by_student
+  entity: daily_attendance_entry
+  operation: list
+  description: Fetches daily attendance entries for a student.
+  capability: attendance.daily_attendance_entry.list
+  required_parameters:
+  - studentId
+  optional_parameters: []
+  response_type: structured
+  version: 1.0.0
+  status: active
+  input:
+    schema_summary:
+      studentId: str
+      context: VidhyaRequestContext
+  output:
+    type: json
+- id: vidhya.attendance.daily_attendance.read.get_daily_attendance
+  name: attendance.get_daily_attendance
+  entity: daily_attendance
+  operation: read
+  description: Fetches a daily attendance session by session ID.
+  capability: attendance.daily_attendance.read
+  required_parameters:
+  - sessionId
+  - academicYearId
+  optional_parameters: []
+  response_type: structured
+  version: 1.0.0
+  status: active
+  input:
+    schema_summary:
+      sessionId: str
+      academicYearId: str
+      context: VidhyaRequestContext
+  output:
+    type: json
+- id: vidhya.attendance.daily_attendance_entry.read.get_daily_attendance_entries
+  name: attendance.get_daily_attendance_entries
+  entity: daily_attendance_entry
+  operation: read
+  description: Fetches daily attendance entries for a session.
+  capability: attendance.daily_attendance_entry.read
+  required_parameters:
+  - sessionId
+  - academicYearId
+  optional_parameters: []
+  response_type: structured
+  version: 1.0.0
+  status: active
+  input:
+    schema_summary:
+      sessionId: str
+      academicYearId: str
+      context: VidhyaRequestContext
+  output:
+    type: json
+- id: vidhya.attendance.attendance_history.list.search_attendance_history
+  name: attendance.search_attendance_history
+  entity: attendance_history
+  operation: list
+  description: Searches paginated cross-mode (daily and period) attendance history.
+  capability: attendance.attendance_history.list
+  required_parameters:
+  - fromDate
+  - toDate
+  optional_parameters:
+  - academicYearId
+  - classId
+  - sectionId
+  - studentId
+  - status
+  - page
+  - size
+  response_type: document
+  version: 1.0.0
+  status: active
+  input:
+    schema_summary:
+      fromDate: str
+      toDate: str
+      academicYearId: str
+      classId: str
+      sectionId: str
+      studentId: str
+      status: str
+      page: str
+      size: str
+      context: VidhyaRequestContext
   output:
     type: json
 - id: vidhya.attendance.period_attendance.create.save_period_attendance
   name: attendance.save_period_attendance
   entity: period_attendance
   operation: create
-  description: Saves period attendance.
+  description: Saves period attendance for a class section, creating the session
+    if absent and triggering summary recalculation.
   capability: attendance.period_attendance.create
   required_parameters:
-  - request
+  - academicYearId
+  - classId
+  - sectionId
+  - attendanceDate
+  - periodNumber
+  - subjectId
+  - entries
   optional_parameters: []
   response_type: structured
   version: 1.0.0
   status: active
   input:
     schema_summary:
+      academicYearId: str
+      classId: str
+      sectionId: str
+      attendanceDate: str
+      periodNumber: str
+      subjectId: str
+      entries: list[dict[str, Any]]
       context: VidhyaRequestContext
-      request: PeriodAttendanceSaveRequest
   output:
     type: json
 - id: vidhya.attendance.period_attendance.list.list_period_attendance
   name: attendance.list_period_attendance
   entity: period_attendance
   operation: list
-  description: Fetches period attendance sessions for the request organization and
-    branch.
+  description: Fetches period attendance sessions for an academic year, optionally
+    filtered by class or section.
   capability: attendance.period_attendance.list
-  required_parameters: []
-  optional_parameters: []
+  required_parameters:
+  - academicYearId
+  optional_parameters:
+  - classId
+  - sectionId
   response_type: structured
   version: 1.0.0
   status: active
   input:
     schema_summary:
+      academicYearId: str
+      classId: str
+      sectionId: str
       context: VidhyaRequestContext
   output:
     type: json
-- id: vidhya.attendance.period_attendance_by_student.list.list_period_attendance_by_student
-  name: attendance.list_period_attendance_by_student
-  entity: period_attendance_by_student
+- id: vidhya.attendance.period_attendance_entry.list.list_period_attendance_entries_by_student
+  name: attendance.list_period_attendance_entries_by_student
+  entity: period_attendance_entry
   operation: list
   description: Fetches period attendance entries for a student.
-  capability: attendance.period_attendance_by_student.list
+  capability: attendance.period_attendance_entry.list
   required_parameters:
-  - student_id
+  - studentId
   optional_parameters: []
   response_type: structured
   version: 1.0.0
   status: active
   input:
     schema_summary:
+      studentId: str
       context: VidhyaRequestContext
-      student_id: str
   output:
     type: json
 - id: vidhya.attendance.period_attendance.read.get_period_attendance
@@ -679,122 +642,102 @@ tools:
   description: Fetches a period attendance session by session ID.
   capability: attendance.period_attendance.read
   required_parameters:
-  - session_id
+  - sessionId
+  - academicYearId
   optional_parameters: []
   response_type: structured
   version: 1.0.0
   status: active
   input:
     schema_summary:
+      sessionId: str
+      academicYearId: str
       context: VidhyaRequestContext
-      session_id: str
   output:
     type: json
-- id: vidhya.attendance.period_attendance_entries.read.get_period_attendance_entries
+- id: vidhya.attendance.period_attendance_entry.read.get_period_attendance_entries
   name: attendance.get_period_attendance_entries
-  entity: period_attendance_entries
+  entity: period_attendance_entry
   operation: read
   description: Fetches period attendance entries for a session.
-  capability: attendance.period_attendance_entries.read
+  capability: attendance.period_attendance_entry.read
   required_parameters:
-  - session_id
+  - sessionId
+  - academicYearId
   optional_parameters: []
   response_type: structured
   version: 1.0.0
   status: active
   input:
     schema_summary:
+      sessionId: str
+      academicYearId: str
       context: VidhyaRequestContext
-      session_id: str
   output:
     type: json
 - id: vidhya.attendance.student_summary.read.get_student_summary
   name: attendance.get_student_summary
   entity: student_summary
   operation: read
-  description: Fetches attendance summary for a student.
+  description: Fetches the overall attendance summary for a student.
   capability: attendance.student_summary.read
   required_parameters:
-  - student_id
-  optional_parameters: []
+  - studentId
+  - academicYearId
+  optional_parameters:
+  - classId
+  - sectionId
   response_type: structured
   version: 1.0.0
   status: active
   input:
     schema_summary:
+      studentId: str
+      academicYearId: str
+      classId: str
+      sectionId: str
       context: VidhyaRequestContext
-      student_id: str
   output:
     type: json
 - id: vidhya.attendance.student_subject_summary.read.get_student_subject_summary
   name: attendance.get_student_subject_summary
   entity: student_subject_summary
   operation: read
-  description: Fetches subject attendance summary for a student.
+  description: Fetches the subject-wise attendance summary for a student.
   capability: attendance.student_subject_summary.read
   required_parameters:
-  - student_id
-  optional_parameters: []
+  - studentId
+  - academicYearId
+  optional_parameters:
+  - classId
+  - sectionId
   response_type: structured
   version: 1.0.0
   status: active
   input:
     schema_summary:
+      studentId: str
+      academicYearId: str
+      classId: str
+      sectionId: str
       context: VidhyaRequestContext
-      student_id: str
   output:
     type: json
 - id: vidhya.attendance.student_summaries.list.list_student_summaries
   name: attendance.list_student_summaries
   entity: student_summaries
   operation: list
-  description: Fetches student attendance summaries for the request organization and
-    branch.
+  description: Fetches student attendance summaries for an academic year.
   capability: attendance.student_summaries.list
-  required_parameters: []
-  optional_parameters: []
-  response_type: structured
-  version: 1.0.0
-  status: active
-  input:
-    schema_summary:
-      context: VidhyaRequestContext
-  output:
-    type: json
-- id: vidhya.attendance.student_summary.update.recalculate_student_summary
-  name: attendance.recalculate_student_summary
-  entity: student_summary
-  operation: update
-  description: Recalculates attendance summary for a student.
-  capability: attendance.student_summary.update
   required_parameters:
-  - student_id
-  - request
+  - academicYearId
   optional_parameters: []
   response_type: structured
   version: 1.0.0
   status: active
   input:
     schema_summary:
-      context: VidhyaRequestContext
-      student_id: str
-      request: StudentAttendanceRecalculateRequest
-  output:
-    type: json
-- id: vidhya.attendance.all_student_summaries.update.recalculate_all_student_summaries
-  name: attendance.recalculate_all_student_summaries
-  entity: all_student_summaries
-  operation: update
-  description: Recalculates all student attendance summaries for the request organization
-    and branch.
-  capability: attendance.all_student_summaries.update
-  required_parameters: []
-  optional_parameters: []
-  response_type: structured
-  version: 1.0.0
-  status: active
-  input:
-    schema_summary:
+      academicYearId: str
       context: VidhyaRequestContext
   output:
     type: json

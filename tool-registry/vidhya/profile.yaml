@@ -23,12 +23,12 @@ tools:
       request: DepartmentCreateRequest
   output:
     type: json
-- id: vidhya.profile.all_departments.read.get_all_departments
+- id: vidhya.profile.all_departments.list.get_all_departments
   name: profile.get_all_departments
   entity: all_departments
-  operation: read
+  operation: list
   description: Fetches all departments for the request organization and branch.
-  capability: profile.all_departments.read
+  capability: profile.all_departments.list
   required_parameters: []
   optional_parameters: []
   response_type: structured
@@ -39,12 +39,12 @@ tools:
       context: VidhyaRequestContext
   output:
     type: json
-- id: vidhya.profile.employees_by_department_id.read.get_employees_by_department_id
+- id: vidhya.profile.employees_by_department_id.list.get_employees_by_department_id
   name: profile.get_employees_by_department_id
   entity: employees_by_department_id
-  operation: read
+  operation: list
   description: Fetches employees assigned to a department.
-  capability: profile.employees_by_department_id.read
+  capability: profile.employees_by_department_id.list
   required_parameters:
   - department_id
   optional_parameters: []
@@ -57,12 +57,12 @@ tools:
       department_id: str
   output:
     type: json
-- id: vidhya.profile.employees_by_branch.read.get_employees_by_branch
+- id: vidhya.profile.employees_by_branch.list.get_employees_by_branch
   name: profile.get_employees_by_branch
   entity: employees_by_branch
-  operation: read
-  description: Fetches all employees for the request branch.
-  capability: profile.employees_by_branch.read
+  operation: list
+  description: Fetches the full employee roster for the request branch.
+  capability: profile.employees_by_branch.list
   required_parameters: []
   optional_parameters: []
   response_type: structured
@@ -91,12 +91,12 @@ tools:
       request: EmployeeCategoryCreateRequest
   output:
     type: json
-- id: vidhya.profile.all_employee_categories.read.get_all_employee_categories
+- id: vidhya.profile.all_employee_categories.list.get_all_employee_categories
   name: profile.get_all_employee_categories
   entity: all_employee_categories
-  operation: read
+  operation: list
   description: Fetches all employee categories for the request organization and branch.
-  capability: profile.all_employee_categories.read
+  capability: profile.all_employee_categories.list
   required_parameters: []
   optional_parameters: []
   response_type: structured
@@ -107,12 +107,12 @@ tools:
       context: VidhyaRequestContext
   output:
     type: json
-- id: vidhya.profile.employees_by_category.read.get_employees_by_category
+- id: vidhya.profile.employees_by_category.list.get_employees_by_category
   name: profile.get_employees_by_category
   entity: employees_by_category
-  operation: read
+  operation: list
   description: Fetches employees assigned to an employee category.
-  capability: profile.employees_by_category.read
+  capability: profile.employees_by_category.list
   required_parameters:
   - category_id
   optional_parameters: []
@@ -125,12 +125,12 @@ tools:
       category_id: str
   output:
     type: json
-- id: vidhya.profile.employees_by_category_with_loads.read.get_employees_by_category_with_loads
+- id: vidhya.profile.employees_by_category_with_loads.list.get_employees_by_category_with_loads
   name: profile.get_employees_by_category_with_loads
   entity: employees_by_category_with_loads
-  operation: read
+  operation: list
   description: Fetches employees and load data for an employee category.
-  capability: profile.employees_by_category_with_loads.read
+  capability: profile.employees_by_category_with_loads.list
   required_parameters:
   - category_id
   optional_parameters: []
@@ -147,7 +147,8 @@ tools:
   name: profile.get_categories_and_departments_by_branch
   entity: categories_and_departments_by_branch
   operation: read
-  description: Fetches employee categories and departments for the request branch.
+  description: Fetches employee categories and departments for the request branch
+    as one combined object.
   capability: profile.categories_and_departments_by_branch.read
   required_parameters: []
   optional_parameters: []
@@ -159,13 +160,46 @@ tools:
       context: VidhyaRequestContext
   output:
     type: json
-- id: vidhya.profile.employee_certifications.read.get_employee_certifications
+- id: vidhya.profile.employee_certifications.create.upsert_employee_certification
+  name: profile.upsert_employee_certification
+  entity: employee_certifications
+  operation: create
+  description: Creates or updates (keyed on referenceId) an employee certification,
+    optionally with a supporting document attachment.
+  capability: profile.employee_certifications.create
+  required_parameters:
+  - certificationName
+  optional_parameters:
+  - referenceId
+  - employeeUserId
+  - issuingOrganization
+  - issueDate
+  - expirationDate
+  - credentialUrl
+  - document
+  response_type: structured
+  version: 1.0.0
+  status: active
+  input:
+    schema_summary:
+      certificationName: str
+      referenceId: str
+      employeeUserId: str
+      issuingOrganization: str
+      issueDate: str
+      expirationDate: str
+      credentialUrl: str
+      document: file
+      context: VidhyaRequestContext
+  output:
+    type: json
+- id: vidhya.profile.employee_certifications.list.get_employee_certifications
   name: profile.get_employee_certifications
   entity: employee_certifications
-  operation: read
+  operation: list
   description: Fetches employee certifications. If employee_id is omitted, uses the
     logged-in user from context.
-  capability: profile.employee_certifications.read
+  capability: profile.employee_certifications.list
   required_parameters: []
   optional_parameters:
   - employee_id
@@ -178,13 +212,14 @@ tools:
       employee_id: str | null
   output:
     type: json
-- id: vidhya.profile.employee_details.read.get_employee_details
+- id: vidhya.profile.employee_details.list.get_employee_details
   name: profile.get_employee_details
   entity: employee_details
-  operation: read
-  description: Fetches employee details. If employee_id is omitted, uses the logged-in
-    user from context.
-  capability: profile.employee_details.read
+  operation: list
+  description: Fetches employee details (qualifications, experience, skills, certifications).
+    Falls back from a specific employee to the caller to, if both are absent, every
+    employee org/branch-wide - confirm a role gate is in place before broad use.
+  capability: profile.employee_details.list
   required_parameters: []
   optional_parameters:
   - employee_id
@@ -197,12 +232,12 @@ tools:
       employee_id: str | null
   output:
     type: json
-- id: vidhya.profile.employees_by_role_id.read.get_employees_by_role_id
+- id: vidhya.profile.employees_by_role_id.list.get_employees_by_role_id
   name: profile.get_employees_by_role_id
   entity: employees_by_role_id
-  operation: read
+  operation: list
   description: Fetches employees assigned to a role.
-  capability: profile.employees_by_role_id.read
+  capability: profile.employees_by_role_id.list
   required_parameters:
   - role_id
   optional_parameters: []
@@ -215,13 +250,46 @@ tools:
       role_id: str
   output:
     type: json
-- id: vidhya.profile.employee_experiences.read.get_employee_experiences
+- id: vidhya.profile.employee_experiences.create.upsert_employee_experience
+  name: profile.upsert_employee_experience
+  entity: employee_experiences
+  operation: create
+  description: Creates or updates (keyed on referenceId) an employee work experience
+    entry, optionally with a supporting document attachment.
+  capability: profile.employee_experiences.create
+  required_parameters:
+  - designation
+  - startDate
+  optional_parameters:
+  - referenceId
+  - employeeUserId
+  - organizationName
+  - endDate
+  - responsibilities
+  - document
+  response_type: structured
+  version: 1.0.0
+  status: active
+  input:
+    schema_summary:
+      designation: str
+      startDate: str
+      referenceId: str
+      employeeUserId: str
+      organizationName: str
+      endDate: str
+      responsibilities: str
+      document: file
+      context: VidhyaRequestContext
+  output:
+    type: json
+- id: vidhya.profile.employee_experiences.list.get_employee_experiences
   name: profile.get_employee_experiences
   entity: employee_experiences
-  operation: read
+  operation: list
   description: Fetches employee experiences. If employee_id is omitted, uses the logged-in
     user from context.
-  capability: profile.employee_experiences.read
+  capability: profile.employee_experiences.list
   required_parameters: []
   optional_parameters:
   - employee_id
@@ -270,13 +338,13 @@ tools:
       request: EmployeeLoadUpsertRequest
   output:
     type: json
-- id: vidhya.profile.employee_loads.read.get_employee_loads
+- id: vidhya.profile.employee_loads.list.get_employee_loads
   name: profile.get_employee_loads
   entity: employee_loads
-  operation: read
+  operation: list
   description: Fetches employee loads. If employee_id is omitted, uses the logged-in
     user from context.
-  capability: profile.employee_loads.read
+  capability: profile.employee_loads.list
   required_parameters: []
   optional_parameters:
   - employee_id
@@ -289,12 +357,12 @@ tools:
       employee_id: str | null
   output:
     type: json
-- id: vidhya.profile.all_employee_loads.read.get_all_employee_loads
+- id: vidhya.profile.all_employee_loads.list.get_all_employee_loads
   name: profile.get_all_employee_loads
   entity: all_employee_loads
-  operation: read
+  operation: list
   description: Fetches all employee loads for the request branch.
-  capability: profile.all_employee_loads.read
+  capability: profile.all_employee_loads.list
   required_parameters: []
   optional_parameters: []
   response_type: structured
@@ -325,13 +393,48 @@ tools:
       request: EmployeeLoadUpdateRequest
   output:
     type: json
-- id: vidhya.profile.employee_qualifications.read.get_employee_qualifications
+- id: vidhya.profile.employee_qualifications.create.upsert_employee_qualification
+  name: profile.upsert_employee_qualification
+  entity: employee_qualifications
+  operation: create
+  description: Creates or updates (keyed on referenceId) an employee qualification,
+    optionally with a supporting document attachment.
+  capability: profile.employee_qualifications.create
+  required_parameters:
+  - qualificationName
+  optional_parameters:
+  - referenceId
+  - employeeUserId
+  - specialization
+  - institutionName
+  - university
+  - passingYear
+  - percentage
+  - document
+  response_type: structured
+  version: 1.0.0
+  status: active
+  input:
+    schema_summary:
+      qualificationName: str
+      referenceId: str
+      employeeUserId: str
+      specialization: str
+      institutionName: str
+      university: str
+      passingYear: str
+      percentage: str
+      document: file
+      context: VidhyaRequestContext
+  output:
+    type: json
+- id: vidhya.profile.employee_qualifications.list.get_employee_qualifications
   name: profile.get_employee_qualifications
   entity: employee_qualifications
-  operation: read
+  operation: list
   description: Fetches employee qualifications. If employee_id is omitted, uses the
     logged-in user from context.
-  capability: profile.employee_qualifications.read
+  capability: profile.employee_qualifications.list
   required_parameters: []
   optional_parameters:
   - employee_id
@@ -348,7 +451,7 @@ tools:
   name: profile.upsert_employee_skills
   entity: employee_skills
   operation: update
-  description: Creates or updates employee skills.
+  description: Creates or updates (toggled by referenceId) employee skills.
   capability: profile.employee_skills.update
   required_parameters:
   - request
@@ -362,13 +465,13 @@ tools:
       request: EmployeeSkillUpsertRequest
   output:
     type: json
-- id: vidhya.profile.employee_skills.read.get_employee_skills
+- id: vidhya.profile.employee_skills.list.get_employee_skills
   name: profile.get_employee_skills
   entity: employee_skills
-  operation: read
+  operation: list
   description: Fetches employee skills. If employee_id is omitted, uses the logged-in
     user from context.
-  capability: profile.employee_skills.read
+  capability: profile.employee_skills.list
   required_parameters: []
   optional_parameters:
   - employee_id
@@ -417,14 +520,15 @@ tools:
       request: EmployeeSubjectStatusBulkPatchRequest
   output:
     type: json
-- id: vidhya.profile.employee_subjects.read.get_employee_subjects
+- id: vidhya.profile.employee_subjects.list.get_employee_subjects
   name: profile.get_employee_subjects
   entity: employee_subjects
-  operation: read
+  operation: list
   description: Fetches employee subjects. If employee_id is omitted, uses the logged-in
     user from context.
-  capability: profile.employee_subjects.read
-  required_parameters: []
+  capability: profile.employee_subjects.list
+  required_parameters:
+  - academicYearId
   optional_parameters:
   - employee_id
   response_type: structured
@@ -433,6 +537,7 @@ tools:
   input:
     schema_summary:
       context: VidhyaRequestContext
+      academicYearId: str
       employee_id: str | null
   output:
     type: json
@@ -440,7 +545,8 @@ tools:
   name: profile.create_languages
   entity: languages
   operation: create
-  description: Creates languages.
+  description: Creates languages. Global reference data with no org/branch scoping
+    - confirm that is intentional before broad use.
   capability: profile.languages.create
   required_parameters:
   - request
@@ -454,12 +560,12 @@ tools:
       request: LanguageCreateRequest
   output:
     type: json
-- id: vidhya.profile.all_languages.read.get_all_languages
+- id: vidhya.profile.all_languages.list.get_all_languages
   name: profile.get_all_languages
   entity: all_languages
-  operation: read
+  operation: list
   description: Fetches all languages.
-  capability: profile.all_languages.read
+  capability: profile.all_languages.list
   required_parameters: []
   optional_parameters: []
   response_type: structured
@@ -470,12 +576,14 @@ tools:
       context: VidhyaRequestContext
   output:
     type: json
-- id: vidhya.profile.students.read.get_students
+- id: vidhya.profile.students.list.get_students
   name: profile.get_students
   entity: students
-  operation: read
-  description: Fetches students. If student_id is provided, returns that student.
-  capability: profile.students.read
+  operation: list
+  description: Fetches students. If student_id is omitted, returns every student
+    org/branch-wide, including disability marker and parent income/occupation -
+    confirm a role gate is in place before broad use.
+  capability: profile.students.list
   required_parameters: []
   optional_parameters:
   - student_id
@@ -486,5 +594,167 @@ tools:
     schema_summary:
       context: VidhyaRequestContext
       student_id: str | null
+  output:
+    type: json
+- id: vidhya.profile.student_academic.create.create_student_academic_transitions
+  name: profile.create_student_academic_transitions
+  entity: student_academic
+  operation: create
+  description: Creates student enrollment or class/section transition records in
+    bulk.
+  capability: profile.student_academic.create
+  required_parameters:
+  - records
+  optional_parameters: []
+  response_type: structured
+  version: 1.0.0
+  status: active
+  input:
+    schema_summary:
+      records: list[dict[str, Any]]
+      context: VidhyaRequestContext
+  output:
+    type: json
+- id: vidhya.profile.student_academic_readmission.create.readmit_student
+  name: profile.readmit_student
+  entity: student_academic_readmission
+  operation: create
+  description: Re-admits a previously exited student.
+  capability: profile.student_academic_readmission.create
+  required_parameters:
+  - studentId
+  - classId
+  - sectionId
+  - academicYearId
+  optional_parameters:
+  - remarks
+  response_type: structured
+  version: 1.0.0
+  status: active
+  input:
+    schema_summary:
+      studentId: str
+      classId: str
+      sectionId: str
+      academicYearId: str
+      remarks: str
+      context: VidhyaRequestContext
+  output:
+    type: json
+- id: vidhya.profile.student_academic.list.list_student_academic_by_class_section
+  name: profile.list_student_academic_by_class_section
+  entity: student_academic
+  operation: list
+  description: Fetches student academic/transition records for a class section,
+    optionally filtered by transition type.
+  capability: profile.student_academic.list
+  required_parameters:
+  - classId
+  - sectionId
+  - academicYearId
+  optional_parameters:
+  - transitionType
+  - isCurrent
+  response_type: structured
+  version: 1.0.0
+  status: active
+  input:
+    schema_summary:
+      classId: str
+      sectionId: str
+      academicYearId: str
+      transitionType: str
+      isCurrent: str
+      context: VidhyaRequestContext
+  output:
+    type: json
+- id: vidhya.profile.student_academic_by_class.list.list_student_academic_by_class
+  name: profile.list_student_academic_by_class
+  entity: student_academic_by_class
+  operation: list
+  description: Fetches student academic records for a class.
+  capability: profile.student_academic_by_class.list
+  required_parameters:
+  - classId
+  - academicYearId
+  optional_parameters:
+  - isCurrent
+  response_type: structured
+  version: 1.0.0
+  status: active
+  input:
+    schema_summary:
+      classId: str
+      academicYearId: str
+      isCurrent: str
+      context: VidhyaRequestContext
+  output:
+    type: json
+- id: vidhya.profile.student_academic.read.get_student_academic_history
+  name: profile.get_student_academic_history
+  entity: student_academic
+  operation: read
+  description: Fetches the full academic/transition history for one student.
+  capability: profile.student_academic.read
+  required_parameters:
+  - studentId
+  optional_parameters:
+  - isCurrent
+  response_type: structured
+  version: 1.0.0
+  status: active
+  input:
+    schema_summary:
+      studentId: str
+      isCurrent: str
+      context: VidhyaRequestContext
+  output:
+    type: json
+- id: vidhya.profile.student_academic_student_details.list.list_student_academic_student_details
+  name: profile.list_student_academic_student_details
+  entity: student_academic_student_details
+  operation: list
+  description: Fetches a combined roster and student detail view for a class section.
+  capability: profile.student_academic_student_details.list
+  required_parameters:
+  - academicYearId
+  - classId
+  - sectionId
+  optional_parameters:
+  - status
+  response_type: structured
+  version: 1.0.0
+  status: active
+  input:
+    schema_summary:
+      academicYearId: str
+      classId: str
+      sectionId: str
+      status: str
+      context: VidhyaRequestContext
+  output:
+    type: json
+- id: vidhya.profile.student_academic_status.update.update_student_academic_status
+  name: profile.update_student_academic_status
+  entity: student_academic_status
+  operation: update
+  description: Updates enrollment status for a batch of students in a class section.
+  capability: profile.student_academic_status.update
+  required_parameters:
+  - classId
+  - sectionId
+  - academicYearId
+  - requests
+  optional_parameters: []
+  response_type: structured
+  version: 1.0.0
+  status: active
+  input:
+    schema_summary:
+      classId: str
+      sectionId: str
+      academicYearId: str
+      requests: list[dict[str, Any]]
+      context: VidhyaRequestContext
   output:
     type: json

@@ -70,8 +70,8 @@ tools:
   description: Updates an academic year.
   capability: academic.year.update
   required_parameters:
+  - id
   - academicYear
-  optional_parameters:
   - startMonth
   - monthsTenure
   - firstQuarterStartMonth
@@ -82,11 +82,13 @@ tools:
   - secondHalfStartMonth
   - monthlyDueDate
   - isCurrentAcademicYear
+  optional_parameters: []
   response_type: structured
   version: 1.0.0
   status: active
   input:
     schema_summary:
+      id: str
       academicYear: str
       startMonth: str
       monthsTenure: str
@@ -126,32 +128,38 @@ tools:
   description: Updates an activity category.
   capability: academic.activity-category.update
   required_parameters:
+  - categoryId
   - categoryName
-  - newCategoryName
   optional_parameters: []
   response_type: structured
   version: 1.0.0
   status: active
   input:
     schema_summary:
+      categoryId: str
       categoryName: str
-      newCategoryName: str
       context: VidhyaRequestContext
   output:
     type: json
-- id: vidhya.academic.activity_category.list.get_all_categories
-  name: academic.get_all_categories
+- id: vidhya.academic.activity_category.list.get_categories
+  name: academic.get_categories
   entity: activity_category
   operation: list
-  description: Fetches all activity categories.
+  description: Fetches activity categories, optionally filtered by class or section.
   capability: academic.activity-category.list
   required_parameters: []
-  optional_parameters: []
+  optional_parameters:
+  - academicYearId
+  - classId
+  - sectionId
   response_type: structured
   version: 1.0.0
   status: active
   input:
     schema_summary:
+      academicYearId: str
+      classId: str
+      sectionId: str
       context: VidhyaRequestContext
   output:
     type: json
@@ -162,40 +170,18 @@ tools:
   description: Assigns activity categories to classes.
   capability: academic.activity-category.assign
   required_parameters:
-  - academicYear
-  - classNames
-  - categoryNames
+  - academicYearId
+  - classIds
+  - categoryIds
   optional_parameters: []
   response_type: structured
   version: 1.0.0
   status: active
   input:
     schema_summary:
-      academicYear: str
-      classNames: str
-      categoryNames: str
-      context: VidhyaRequestContext
-  output:
-    type: json
-- id: vidhya.academic.activity_category.assign.update_categories_to_class
-  name: academic.update_categories_to_class
-  entity: activity_category
-  operation: assign
-  description: Updates activity categories for classes.
-  capability: academic.activity-category.assign
-  required_parameters:
-  - academicYear
-  - classNames
-  - categoryNames
-  optional_parameters: []
-  response_type: structured
-  version: 1.0.0
-  status: active
-  input:
-    schema_summary:
-      academicYear: str
-      classNames: str
-      categoryNames: str
+      academicYearId: str
+      classIds: list[str]
+      categoryIds: list[str]
       context: VidhyaRequestContext
   output:
     type: json
@@ -206,86 +192,18 @@ tools:
   description: Assigns activity categories to sections.
   capability: academic.activity-category.assign
   required_parameters:
-  - academicYear
-  - className
-  - sectionNames
-  - categoryNames
+  - academicYearId
+  - sectionIds
+  - categoryIds
   optional_parameters: []
   response_type: structured
   version: 1.0.0
   status: active
   input:
     schema_summary:
-      academicYear: str
-      className: str
-      sectionNames: str
-      categoryNames: str
-      context: VidhyaRequestContext
-  output:
-    type: json
-- id: vidhya.academic.activity_category.assign.update_categories_to_section
-  name: academic.update_categories_to_section
-  entity: activity_category
-  operation: assign
-  description: Updates activity categories for sections.
-  capability: academic.activity-category.assign
-  required_parameters:
-  - academicYear
-  - className
-  - sectionNames
-  - categoryNames
-  optional_parameters: []
-  response_type: structured
-  version: 1.0.0
-  status: active
-  input:
-    schema_summary:
-      academicYear: str
-      className: str
-      sectionNames: str
-      categoryNames: str
-      context: VidhyaRequestContext
-  output:
-    type: json
-- id: vidhya.academic.activity_category.list.get_categories_by_class
-  name: academic.get_categories_by_class
-  entity: activity_category
-  operation: list
-  description: Fetches activity categories for a class.
-  capability: academic.activity-category.list
-  required_parameters:
-  - academicYear
-  - className
-  optional_parameters: []
-  response_type: structured
-  version: 1.0.0
-  status: active
-  input:
-    schema_summary:
-      academicYear: str
-      className: str
-      context: VidhyaRequestContext
-  output:
-    type: json
-- id: vidhya.academic.activity_category.list.get_categories_by_section
-  name: academic.get_categories_by_section
-  entity: activity_category
-  operation: list
-  description: Fetches activity categories for a section.
-  capability: academic.activity-category.list
-  required_parameters:
-  - academicYear
-  - className
-  - sectionName
-  optional_parameters: []
-  response_type: structured
-  version: 1.0.0
-  status: active
-  input:
-    schema_summary:
-      academicYear: str
-      className: str
-      sectionName: str
+      academicYearId: str
+      sectionIds: list[str]
+      categoryIds: list[str]
       context: VidhyaRequestContext
   output:
     type: json
@@ -297,7 +215,7 @@ tools:
   capability: academic.class.create
   required_parameters:
   - className
-  - classType
+  - classTypeId
   optional_parameters: []
   response_type: structured
   version: 1.0.0
@@ -305,7 +223,7 @@ tools:
   input:
     schema_summary:
       className: str
-      classType: str
+      classTypeId: str
       context: VidhyaRequestContext
   output:
     type: json
@@ -350,14 +268,14 @@ tools:
   description: Fetches a class by ID.
   capability: academic.class.read
   required_parameters:
-  - className
+  - id
   optional_parameters: []
   response_type: structured
   version: 1.0.0
   status: active
   input:
     schema_summary:
-      className: str
+      id: str
       context: VidhyaRequestContext
   output:
     type: json
@@ -368,18 +286,18 @@ tools:
   description: Updates a class.
   capability: academic.class.update
   required_parameters:
+  - id
   - className
-  - newClassName
-  optional_parameters:
-  - classType
+  - classTypeId
+  optional_parameters: []
   response_type: structured
   version: 1.0.0
   status: active
   input:
     schema_summary:
+      id: str
       className: str
-      newClassName: str
-      classType: str
+      classTypeId: str
       context: VidhyaRequestContext
   output:
     type: json
@@ -390,14 +308,14 @@ tools:
   description: Fetches a class type by ID.
   capability: academic.class-type.read
   required_parameters:
-  - classType
+  - id
   optional_parameters: []
   response_type: structured
   version: 1.0.0
   status: active
   input:
     schema_summary:
-      classType: str
+      id: str
       context: VidhyaRequestContext
   output:
     type: json
@@ -424,16 +342,16 @@ tools:
   description: Updates a class type.
   capability: academic.class-type.update
   required_parameters:
+  - id
   - classType
-  - newClassType
   optional_parameters: []
   response_type: structured
   version: 1.0.0
   status: active
   input:
     schema_summary:
+      id: str
       classType: str
-      newClassType: str
       context: VidhyaRequestContext
   output:
     type: json
@@ -460,22 +378,22 @@ tools:
   description: Creates a class section.
   capability: academic.section.create
   required_parameters:
-  - className
+  - classId
   - sectionName
   - sectionStrength
   - roomNumber
-  - teacherName
+  - teacherId
   optional_parameters: []
   response_type: structured
   version: 1.0.0
   status: active
   input:
     schema_summary:
-      className: str
+      classId: str
       sectionName: str
       sectionStrength: str
       roomNumber: str
-      teacherName: str
+      teacherId: str
       context: VidhyaRequestContext
   output:
     type: json
@@ -486,14 +404,14 @@ tools:
   description: Fetches sections for a class.
   capability: academic.section.list
   required_parameters:
-  - className
+  - classId
   optional_parameters: []
   response_type: structured
   version: 1.0.0
   status: active
   input:
     schema_summary:
-      className: str
+      classId: str
       context: VidhyaRequestContext
   output:
     type: json
@@ -504,16 +422,14 @@ tools:
   description: Fetches a class section by ID.
   capability: academic.section.read
   required_parameters:
-  - className
-  - sectionName
+  - id
   optional_parameters: []
   response_type: structured
   version: 1.0.0
   status: active
   input:
     schema_summary:
-      className: str
-      sectionName: str
+      id: str
       context: VidhyaRequestContext
   output:
     type: json
@@ -524,22 +440,20 @@ tools:
   description: Updates a class section.
   capability: academic.section.update
   required_parameters:
-  - className
-  - sectionName
-  optional_parameters:
+  - id
   - sectionStrength
   - roomNumber
-  - teacherName
+  - teacherId
+  optional_parameters: []
   response_type: structured
   version: 1.0.0
   status: active
   input:
     schema_summary:
-      className: str
-      sectionName: str
+      id: str
       sectionStrength: str
       roomNumber: str
-      teacherName: str
+      teacherId: str
       context: VidhyaRequestContext
   output:
     type: json
@@ -550,7 +464,7 @@ tools:
   description: Creates a holiday.
   capability: academic.holiday.create
   required_parameters:
-  - academicYear
+  - schoolAcademicYearId
   - holidayName
   - holidayStartDate
   - holidayEndDate
@@ -561,7 +475,7 @@ tools:
   status: active
   input:
     schema_summary:
-      academicYear: str
+      schoolAcademicYearId: str
       holidayName: str
       holidayStartDate: str
       holidayEndDate: str
@@ -584,7 +498,7 @@ tools:
       entity: academic_year
       operation: list
     path: $.data[?(@.isCurrentAcademicYear==true)].referenceId
-  response_type: document
+  response_type: structured
   version: 1.0.0
   status: active
   input:
@@ -600,19 +514,21 @@ tools:
   description: Updates a holiday.
   capability: academic.holiday.update
   required_parameters:
+  - id
   - holidayName
-  optional_parameters:
-  - academicYear
+  - schoolAcademicYearId
   - holidayStartDate
   - holidayEndDate
   - holidayStatus
+  optional_parameters: []
   response_type: structured
   version: 1.0.0
   status: active
   input:
     schema_summary:
+      id: str
       holidayName: str
-      academicYear: str
+      schoolAcademicYearId: str
       holidayStartDate: str
       holidayEndDate: str
       holidayStatus: str
@@ -643,53 +559,19 @@ tools:
   name: academic.get_all_subjects
   entity: subject
   operation: list
-  description: Fetches all subjects.
+  description: Fetches subjects, optionally filtered by class or section.
   capability: academic.subject.list
   required_parameters: []
-  optional_parameters: []
+  optional_parameters:
+  - classId
+  - sectionId
   response_type: structured
   version: 1.0.0
   status: active
   input:
     schema_summary:
-      context: VidhyaRequestContext
-  output:
-    type: json
-- id: vidhya.academic.subject.list.get_subjects_by_class_id
-  name: academic.get_subjects_by_class_id
-  entity: subject
-  operation: list
-  description: Fetches subjects for a class.
-  capability: academic.subject.list
-  required_parameters:
-  - className
-  optional_parameters: []
-  response_type: structured
-  version: 1.0.0
-  status: active
-  input:
-    schema_summary:
-      className: str
-      context: VidhyaRequestContext
-  output:
-    type: json
-- id: vidhya.academic.subject.list.get_subjects_by_section_id
-  name: academic.get_subjects_by_section_id
-  entity: subject
-  operation: list
-  description: Fetches subjects for a class section.
-  capability: academic.subject.list
-  required_parameters:
-  - className
-  - sectionName
-  optional_parameters: []
-  response_type: structured
-  version: 1.0.0
-  status: active
-  input:
-    schema_summary:
-      className: str
-      sectionName: str
+      classId: str
+      sectionId: str
       context: VidhyaRequestContext
   output:
     type: json
@@ -700,14 +582,14 @@ tools:
   description: Fetches a subject by ID.
   capability: academic.subject.read
   required_parameters:
-  - subjectName
+  - id
   optional_parameters: []
   response_type: structured
   version: 1.0.0
   status: active
   input:
     schema_summary:
-      subjectName: str
+      id: str
       context: VidhyaRequestContext
   output:
     type: json
@@ -718,6 +600,7 @@ tools:
   description: Updates a subject.
   capability: academic.subject.update
   required_parameters:
+  - id
   - subjectName
   optional_parameters:
   - subjectCode
@@ -726,6 +609,7 @@ tools:
   status: active
   input:
     schema_summary:
+      id: str
       subjectName: str
       subjectCode: str
       context: VidhyaRequestContext
@@ -738,8 +622,8 @@ tools:
   description: Assigns subjects to a class.
   capability: academic.subject.assign
   required_parameters:
-  - className
-  - subjectNames
+  - classId
+  - subjectIds
   optional_parameters:
   - subjectSessions
   response_type: structured
@@ -747,47 +631,9 @@ tools:
   status: active
   input:
     schema_summary:
-      className: str
-      subjectNames: str
+      classId: str
+      subjectIds: list[str]
       subjectSessions: str
-      context: VidhyaRequestContext
-  output:
-    type: json
-- id: vidhya.academic.subject.assign.update_assign_subjects_class
-  name: academic.update_assign_subjects_class
-  entity: subject
-  operation: assign
-  description: Updates subject assignments for a class.
-  capability: academic.subject.assign
-  required_parameters:
-  - className
-  - subjectNames
-  optional_parameters:
-  - subjectSessions
-  response_type: structured
-  version: 1.0.0
-  status: active
-  input:
-    schema_summary:
-      className: str
-      subjectNames: str
-      subjectSessions: str
-      context: VidhyaRequestContext
-  output:
-    type: json
-- id: vidhya.academic.subject.list.get_all_subjects_by_classes_and_sections
-  name: academic.get_all_subjects_by_classes_and_sections
-  entity: subject
-  operation: list
-  description: Fetches subjects grouped by classes and sections.
-  capability: academic.subject.list
-  required_parameters: []
-  optional_parameters: []
-  response_type: structured
-  version: 1.0.0
-  status: active
-  input:
-    schema_summary:
       context: VidhyaRequestContext
   output:
     type: json
@@ -798,9 +644,9 @@ tools:
   description: Assigns subjects to a section.
   capability: academic.subject.assign
   required_parameters:
-  - className
-  - sectionName
-  - subjectNames
+  - classId
+  - sectionId
+  - subjectIds
   optional_parameters:
   - subjectSessions
   response_type: structured
@@ -808,9 +654,9 @@ tools:
   status: active
   input:
     schema_summary:
-      className: str
-      sectionName: str
-      subjectNames: str
+      classId: str
+      sectionId: str
+      subjectIds: list[str]
       subjectSessions: str
       context: VidhyaRequestContext
   output:

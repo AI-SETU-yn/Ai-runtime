@@ -23,12 +23,12 @@ tools:
       request: CreateAdhocFeeRequest
   output:
     type: json
-- id: vidhya.fee.adhoc_fees_by_academic_year_and_section.read.get_adhoc_fees_by_academic_year_and_section
+- id: vidhya.fee.adhoc_fees_by_academic_year_and_section.list.get_adhoc_fees_by_academic_year_and_section
   name: fee.get_adhoc_fees_by_academic_year_and_section
   entity: adhoc_fees_by_academic_year_and_section
-  operation: read
+  operation: list
   description: Fetches adhoc fees by academic year and section.
-  capability: fee.adhoc_fees_by_academic_year_and_section.read
+  capability: fee.adhoc_fees_by_academic_year_and_section.list
   required_parameters:
   - academic_year_id
   - section_id
@@ -43,12 +43,12 @@ tools:
       section_id: str
   output:
     type: json
-- id: vidhya.fee.adhoc_fee_class_sections.read.get_adhoc_fee_class_sections
+- id: vidhya.fee.adhoc_fee_class_sections.list.get_adhoc_fee_class_sections
   name: fee.get_adhoc_fee_class_sections
   entity: adhoc_fee_class_sections
-  operation: read
-  description: Fetches class sections for adhoc fee selection.
-  capability: fee.adhoc_fee_class_sections.read
+  operation: list
+  description: Fetches class sections available for adhoc fee selection.
+  capability: fee.adhoc_fee_class_sections.list
   required_parameters:
   - request
   optional_parameters: []
@@ -81,58 +81,23 @@ tools:
       request: UpdateAdhocFeeRequest
   output:
     type: json
-- id: vidhya.fee.fee_receipt.read.get_fee_receipt
-  name: fee.get_fee_receipt
+- id: vidhya.fee.fee_receipt.read.get_fee_receipts
+  name: fee.get_fee_receipts
   entity: fee_receipt
   operation: read
-  description: Fetches fee receipt data.
+  description: Fetches fee receipt data, optionally scoped to a class or class section
+    via the request payload.
   capability: fee.fee_receipt.read
   required_parameters:
   - request
   optional_parameters: []
-  response_type: structured
+  response_type: document
   version: 1.0.0
   status: active
   input:
     schema_summary:
       context: VidhyaRequestContext
       request: GetFeeReceiptRequest
-  output:
-    type: json
-- id: vidhya.fee.fee_receipts_by_class.read.get_fee_receipts_by_class
-  name: fee.get_fee_receipts_by_class
-  entity: fee_receipts_by_class
-  operation: read
-  description: Fetches fee receipts by class.
-  capability: fee.fee_receipts_by_class.read
-  required_parameters:
-  - request
-  optional_parameters: []
-  response_type: structured
-  version: 1.0.0
-  status: active
-  input:
-    schema_summary:
-      context: VidhyaRequestContext
-      request: GetFeeReceiptsByClassRequest
-  output:
-    type: json
-- id: vidhya.fee.fee_receipts_by_class_section.read.get_fee_receipts_by_class_section
-  name: fee.get_fee_receipts_by_class_section
-  entity: fee_receipts_by_class_section
-  operation: read
-  description: Fetches fee receipts by class and section.
-  capability: fee.fee_receipts_by_class_section.read
-  required_parameters:
-  - request
-  optional_parameters: []
-  response_type: structured
-  version: 1.0.0
-  status: active
-  input:
-    schema_summary:
-      context: VidhyaRequestContext
-      request: GetFeeReceiptsByClassSectionRequest
   output:
     type: json
 - id: vidhya.fee.fee_branch_policy.create.create_fee_branch_policy
@@ -171,12 +136,12 @@ tools:
       request: UpdateFeeBranchPolicyRequest
   output:
     type: json
-- id: vidhya.fee.all_fee_branch_policies.read.get_all_fee_branch_policies
+- id: vidhya.fee.all_fee_branch_policies.list.get_all_fee_branch_policies
   name: fee.get_all_fee_branch_policies
   entity: all_fee_branch_policies
-  operation: read
+  operation: list
   description: Fetches fee branch policies for the request organization and branch.
-  capability: fee.all_fee_branch_policies.read
+  capability: fee.all_fee_branch_policies.list
   required_parameters: []
   optional_parameters: []
   response_type: structured
@@ -223,12 +188,12 @@ tools:
       request: UpdateFeeCategoryTypeRequest
   output:
     type: json
-- id: vidhya.fee.all_fee_category_types.read.get_all_fee_category_types
+- id: vidhya.fee.all_fee_category_types.list.get_all_fee_category_types
   name: fee.get_all_fee_category_types
   entity: all_fee_category_types
-  operation: read
+  operation: list
   description: Fetches fee category types for the request organization and branch.
-  capability: fee.all_fee_category_types.read
+  capability: fee.all_fee_category_types.list
   required_parameters: []
   optional_parameters: []
   response_type: structured
@@ -275,52 +240,25 @@ tools:
       request: UpdateFeeCategoryRequest
   output:
     type: json
-- id: vidhya.fee.all_fee_categories.read.get_all_fee_categories
+- id: vidhya.fee.all_fee_categories.list.get_all_fee_categories
   name: fee.get_all_fee_categories
   entity: all_fee_categories
-  operation: read
-  description: Fetches fee categories for the request organization and branch.
-  capability: fee.all_fee_categories.read
+  operation: list
+  description: Fetches fee categories for the request organization and branch, optionally
+    scoped to the login branch or filtered to transport categories.
+  capability: fee.all_fee_categories.list
   required_parameters: []
-  optional_parameters: []
+  optional_parameters:
+  - scope
+  - category_type
   response_type: structured
   version: 1.0.0
   status: active
   input:
     schema_summary:
       context: VidhyaRequestContext
-  output:
-    type: json
-- id: vidhya.fee.fee_categories_by_login_branch.read.get_fee_categories_by_login_branch
-  name: fee.get_fee_categories_by_login_branch
-  entity: fee_categories_by_login_branch
-  operation: read
-  description: Fetches fee categories for the request branch.
-  capability: fee.fee_categories_by_login_branch.read
-  required_parameters: []
-  optional_parameters: []
-  response_type: structured
-  version: 1.0.0
-  status: active
-  input:
-    schema_summary:
-      context: VidhyaRequestContext
-  output:
-    type: json
-- id: vidhya.fee.transport_fee_categories_by_login_branch.read.get_transport_fee_categories_by_login_branch
-  name: fee.get_transport_fee_categories_by_login_branch
-  entity: transport_fee_categories_by_login_branch
-  operation: read
-  description: Fetches transport fee categories for the request branch.
-  capability: fee.transport_fee_categories_by_login_branch.read
-  required_parameters: []
-  optional_parameters: []
-  response_type: structured
-  version: 1.0.0
-  status: active
-  input:
-    schema_summary:
-      context: VidhyaRequestContext
+      scope: str
+      category_type: str
   output:
     type: json
 - id: vidhya.fee.fee_classification.create.create_fee_classification
@@ -359,12 +297,12 @@ tools:
       request: UpdateFeeClassificationRequest
   output:
     type: json
-- id: vidhya.fee.all_fee_classifications.read.get_all_fee_classifications
+- id: vidhya.fee.all_fee_classifications.list.get_all_fee_classifications
   name: fee.get_all_fee_classifications
   entity: all_fee_classifications
-  operation: read
+  operation: list
   description: Fetches fee classifications for the request organization and branch.
-  capability: fee.all_fee_classifications.read
+  capability: fee.all_fee_classifications.list
   required_parameters: []
   optional_parameters: []
   response_type: structured
@@ -411,12 +349,12 @@ tools:
       request: UpdateFeePaymentTermRequest
   output:
     type: json
-- id: vidhya.fee.all_fee_payment_terms.read.get_all_fee_payment_terms
+- id: vidhya.fee.all_fee_payment_terms.list.get_all_fee_payment_terms
   name: fee.get_all_fee_payment_terms
   entity: all_fee_payment_terms
-  operation: read
+  operation: list
   description: Fetches fee payment terms for the request organization and branch.
-  capability: fee.all_fee_payment_terms.read
+  capability: fee.all_fee_payment_terms.list
   required_parameters: []
   optional_parameters: []
   response_type: structured
@@ -463,12 +401,12 @@ tools:
       request: UpdateFeeStructureRequest
   output:
     type: json
-- id: vidhya.fee.fee_structures_by_branch.read.get_fee_structures_by_branch
+- id: vidhya.fee.fee_structures_by_branch.list.get_fee_structures_by_branch
   name: fee.get_fee_structures_by_branch
   entity: fee_structures_by_branch
-  operation: read
+  operation: list
   description: Fetches fee structures for the request branch.
-  capability: fee.fee_structures_by_branch.read
+  capability: fee.fee_structures_by_branch.list
   required_parameters: []
   optional_parameters: []
   response_type: structured
@@ -479,12 +417,12 @@ tools:
       context: VidhyaRequestContext
   output:
     type: json
-- id: vidhya.fee.fee_structures_with_details_by_academic_year.read.get_fee_structures_with_details_by_academic_year
+- id: vidhya.fee.fee_structures_with_details_by_academic_year.list.get_fee_structures_with_details_by_academic_year
   name: fee.get_fee_structures_with_details_by_academic_year
   entity: fee_structures_with_details_by_academic_year
-  operation: read
+  operation: list
   description: Fetches fee structures with details by academic year.
-  capability: fee.fee_structures_with_details_by_academic_year.read
+  capability: fee.fee_structures_with_details_by_academic_year.list
   required_parameters:
   - academic_year_id
   optional_parameters:
@@ -535,12 +473,12 @@ tools:
       request: UpdateFeeStructureDetailWrapperRequest
   output:
     type: json
-- id: vidhya.fee.fee_structure_details.read.get_fee_structure_details
+- id: vidhya.fee.fee_structure_details.list.get_fee_structure_details
   name: fee.get_fee_structure_details
   entity: fee_structure_details
-  operation: read
+  operation: list
   description: Fetches fee structure details by fee structure ID.
-  capability: fee.fee_structure_details.read
+  capability: fee.fee_structure_details.list
   required_parameters:
   - fee_structure_id
   optional_parameters: []
@@ -557,7 +495,8 @@ tools:
   name: fee.patch_fee_structure_detail_status
   entity: fee_structure_detail_status
   operation: update
-  description: Updates fee structure detail statuses.
+  description: Transitions fee structure detail workflow status (for example DRAFT
+    to APPROVED), gating bill generation.
   capability: fee.fee_structure_detail_status.update
   required_parameters:
   - request
@@ -589,12 +528,12 @@ tools:
       request: UpdateFeeStructureTermDetailRequest
   output:
     type: json
-- id: vidhya.fee.fee_structure_term_details_by_detail.read.get_fee_structure_term_details_by_detail
+- id: vidhya.fee.fee_structure_term_details_by_detail.list.get_fee_structure_term_details_by_detail
   name: fee.get_fee_structure_term_details_by_detail
   entity: fee_structure_term_details_by_detail
-  operation: read
+  operation: list
   description: Fetches fee structure term details by fee structure detail ID.
-  capability: fee.fee_structure_term_details_by_detail.read
+  capability: fee.fee_structure_term_details_by_detail.list
   required_parameters:
   - fee_structure_detail_id
   optional_parameters: []
@@ -607,16 +546,17 @@ tools:
       fee_structure_detail_id: str
   output:
     type: json
-- id: vidhya.fee.student_bills.create.generate_student_bills
+- id: vidhya.fee.student_bill_generation.create.generate_student_bills
   name: fee.generate_student_bills
   entity: student_bill_generation
   operation: create
-  description: Generates student bills.
+  description: Generates and persists real student bills for every student in a
+    class in one call. No dry-run mode exists.
   capability: fee.student_bill_generation.create
   required_parameters:
   - request
   optional_parameters: []
-  response_type: structured
+  response_type: approval
   version: 1.0.0
   status: active
   input:
@@ -625,11 +565,11 @@ tools:
       request: GenerateStudentBillsRequest
   output:
     type: json
-- id: vidhya.fee.student_bills.create.create_student_bills
+- id: vidhya.fee.student_bill.create.create_student_bills
   name: fee.create_student_bills
   entity: student_bill
   operation: create
-  description: Creates student bills.
+  description: Creates an individual student bill.
   capability: fee.student_bill.create
   required_parameters:
   - request
@@ -643,12 +583,12 @@ tools:
       request: CreateStudentBillRequest
   output:
     type: json
-- id: vidhya.fee.student_bills.read.get_student_bills
+- id: vidhya.fee.student_bills.list.get_student_bills
   name: fee.get_student_bills
   entity: student_bills
-  operation: read
+  operation: list
   description: Fetches student bills by student, academic year, and class.
-  capability: fee.student_bills.read
+  capability: fee.student_bills.list
   required_parameters:
   - student_id
   - academic_year_id
@@ -665,12 +605,12 @@ tools:
       class_id: str
   output:
     type: json
-- id: vidhya.fee.student_bills_by_branch.read.get_student_bills_by_branch
+- id: vidhya.fee.student_bills_by_branch.list.get_student_bills_by_branch
   name: fee.get_student_bills_by_branch
   entity: student_bills_by_branch
-  operation: read
+  operation: list
   description: Fetches student bills for the request branch.
-  capability: fee.student_bills_by_branch.read
+  capability: fee.student_bills_by_branch.list
   required_parameters: []
   optional_parameters: []
   response_type: structured
@@ -681,12 +621,12 @@ tools:
       context: VidhyaRequestContext
   output:
     type: json
-- id: vidhya.fee.unbilled_students_by_academic_year_and_class.read.get_unbilled_students_by_academic_year_and_class
+- id: vidhya.fee.unbilled_students_by_academic_year_and_class.list.get_unbilled_students_by_academic_year_and_class
   name: fee.get_unbilled_students_by_academic_year_and_class
   entity: unbilled_students_by_academic_year_and_class
-  operation: read
+  operation: list
   description: Fetches unbilled students by academic year and class.
-  capability: fee.unbilled_students_by_academic_year_and_class.read
+  capability: fee.unbilled_students_by_academic_year_and_class.list
   required_parameters:
   - academic_year_id
   - class_id
@@ -701,16 +641,18 @@ tools:
       class_id: str
   output:
     type: json
-- id: vidhya.fee.students_by_academic_year_and_class.read.get_students_by_academic_year_and_class
+- id: vidhya.fee.students_by_academic_year_and_class.list.get_students_by_academic_year_and_class
   name: fee.get_students_by_academic_year_and_class
   entity: students_by_academic_year_and_class
-  operation: read
-  description: Fetches students by academic year and class.
-  capability: fee.students_by_academic_year_and_class.read
+  operation: list
+  description: Fetches the student roster for an academic year, optionally narrowed
+    to a class and section.
+  capability: fee.students_by_academic_year_and_class.list
   required_parameters:
   - academic_year_id
+  optional_parameters:
   - class_id
-  optional_parameters: []
+  - section_id
   response_type: structured
   version: 1.0.0
   status: active
@@ -719,47 +661,6 @@ tools:
       context: VidhyaRequestContext
       academic_year_id: str
       class_id: str
-  output:
-    type: json
-- id: vidhya.fee.students_by_academic_year_class_and_section.read.get_students_by_academic_year_class_and_section
-  name: fee.get_students_by_academic_year_class_and_section
-  entity: students_by_academic_year_class_and_section
-  operation: read
-  description: Fetches students by academic year, class, and section.
-  capability: fee.students_by_academic_year_class_and_section.read
-  required_parameters:
-  - academic_year_id
-  - class_id
-  - section_id
-  optional_parameters: []
-  response_type: structured
-  version: 1.0.0
-  status: active
-  input:
-    schema_summary:
-      context: VidhyaRequestContext
-      academic_year_id: str
-      class_id: str
-      section_id: str
-  output:
-    type: json
-- id: vidhya.fee.students_by_academic_year_and_section.read.get_students_by_academic_year_and_section
-  name: fee.get_students_by_academic_year_and_section
-  entity: students_by_academic_year_and_section
-  operation: read
-  description: Fetches students by academic year and section.
-  capability: fee.students_by_academic_year_and_section.read
-  required_parameters:
-  - academic_year_id
-  - section_id
-  optional_parameters: []
-  response_type: structured
-  version: 1.0.0
-  status: active
-  input:
-    schema_summary:
-      context: VidhyaRequestContext
-      academic_year_id: str
       section_id: str
   output:
     type: json
@@ -785,12 +686,12 @@ tools:
   name: fee.get_student_bill_report
   entity: student_bill_report
   operation: read
-  description: Fetches student bill report.
+  description: Fetches a generated student bill report.
   capability: fee.student_bill_report.read
   required_parameters:
   - request
   optional_parameters: []
-  response_type: structured
+  response_type: document
   version: 1.0.0
   status: active
   input:
@@ -803,7 +704,7 @@ tools:
   name: fee.create_student_opted_in
   entity: student_opted_in
   operation: create
-  description: Creates a student opted-in record.
+  description: Opts a student into a branch fee policy.
   capability: fee.student_opted_in.create
   required_parameters:
   - request
@@ -837,30 +738,12 @@ tools:
       request: UpdateStudentOptedInRequest
   output:
     type: json
-- id: vidhya.fee.student_opted_in.read.get_student_opted_in
-  name: fee.get_student_opted_in
-  entity: student_opted_in
-  operation: read
-  description: Fetches student opted-in records.
-  capability: fee.student_opted_in.read
-  required_parameters:
-  - request
-  optional_parameters: []
-  response_type: structured
-  version: 1.0.0
-  status: active
-  input:
-    schema_summary:
-      context: VidhyaRequestContext
-      request: GetStudentOptedInRequest
-  output:
-    type: json
-- id: vidhya.fee.student_opted_in_by_student_id.read.get_student_opted_in_by_student_id
+- id: vidhya.fee.student_opted_in_by_student_id.list.get_student_opted_in_by_student_id
   name: fee.get_student_opted_in_by_student_id
   entity: student_opted_in_by_student_id
-  operation: read
+  operation: list
   description: Fetches student opted-in records by student and academic year.
-  capability: fee.student_opted_in_by_student_id.read
+  capability: fee.student_opted_in_by_student_id.list
   required_parameters:
   - student_id
   - academic_year_id
@@ -879,7 +762,8 @@ tools:
   name: fee.create_student_payment
   entity: student_payment
   operation: create
-  description: Creates a student payment.
+  description: Records a student payment already received. No payment gateway integration
+    exists.
   capability: fee.student_payment.create
   required_parameters:
   - request
@@ -893,12 +777,12 @@ tools:
       request: CreateStudentPaymentRequest
   output:
     type: json
-- id: vidhya.fee.student_payments.read.get_student_payments
+- id: vidhya.fee.student_payments.list.get_student_payments
   name: fee.get_student_payments
   entity: student_payments
-  operation: read
+  operation: list
   description: Fetches student payments by student and academic year.
-  capability: fee.student_payments.read
+  capability: fee.student_payments.list
   required_parameters:
   - student_id
   - academic_year_id
@@ -913,12 +797,12 @@ tools:
       academic_year_id: str
   output:
     type: json
-- id: vidhya.fee.student_payments_by_section.read.get_student_payments_by_section
+- id: vidhya.fee.student_payments_by_section.list.get_student_payments_by_section
   name: fee.get_student_payments_by_section
   entity: student_payments_by_section
-  operation: read
+  operation: list
   description: Fetches student payments by section.
-  capability: fee.student_payments_by_section.read
+  capability: fee.student_payments_by_section.list
   required_parameters:
   - section_id
   optional_parameters: []
@@ -931,12 +815,12 @@ tools:
       section_id: str
   output:
     type: json
-- id: vidhya.fee.payment_details.read.get_payment_details
+- id: vidhya.fee.payment_details.list.get_payment_details
   name: fee.get_payment_details
   entity: payment_details
-  operation: read
+  operation: list
   description: Fetches payment details by payment ID.
-  capability: fee.payment_details.read
+  capability: fee.payment_details.list
   required_parameters:
   - payment_id
   optional_parameters: []
@@ -949,12 +833,12 @@ tools:
       payment_id: str
   output:
     type: json
-- id: vidhya.fee.payment_details_by_section.read.get_payment_details_by_section
+- id: vidhya.fee.payment_details_by_section.list.get_payment_details_by_section
   name: fee.get_payment_details_by_section
   entity: payment_details_by_section
-  operation: read
+  operation: list
   description: Fetches payment details by section.
-  capability: fee.payment_details_by_section.read
+  capability: fee.payment_details_by_section.list
   required_parameters:
   - section_id
   optional_parameters: []
@@ -989,12 +873,12 @@ tools:
       class_id: str
   output:
     type: json
-- id: vidhya.fee.fee_summary_by_branch_and_organization.read.get_fee_summary_by_branch_and_organization
+- id: vidhya.fee.fee_summary_by_branch_and_organization.list.get_fee_summary_by_branch_and_organization
   name: fee.get_fee_summary_by_branch_and_organization
   entity: fee_summary_by_branch_and_organization
-  operation: read
+  operation: list
   description: Fetches fee summaries for the request branch and organization.
-  capability: fee.fee_summary_by_branch_and_organization.read
+  capability: fee.fee_summary_by_branch_and_organization.list
   required_parameters: []
   optional_parameters: []
   response_type: structured
@@ -1009,12 +893,14 @@ tools:
   name: fee.update_fee_summary_amounts
   entity: fee_summary_amounts
   operation: update
-  description: Updates fee summary amounts.
+  description: Overwrites a student's charged, paid, discount, and balance fields
+    directly, with no recalculation logic. Single highest-risk financial write in
+    this service.
   capability: fee.fee_summary_amounts.update
   required_parameters:
   - request
   optional_parameters: []
-  response_type: structured
+  response_type: approval
   version: 1.0.0
   status: active
   input:
@@ -1027,7 +913,8 @@ tools:
   name: fee.apply_student_bill_waiver
   entity: student_bill_waiver_application
   operation: update
-  description: Applies student bill waivers.
+  description: Creates a pending fee waiver request for a student bill (not final;
+    see approval).
   capability: fee.student_bill_waiver_application.update
   required_parameters:
   - request
@@ -1045,12 +932,13 @@ tools:
   name: fee.approve_student_bill_waiver
   entity: student_bill_waiver_approval
   operation: update
-  description: Approves student bill waivers.
+  description: Finalizes a fee waiver, writing off owed money. Irreversible financial
+    action.
   capability: fee.student_bill_waiver_approval.update
   required_parameters:
   - request
   optional_parameters: []
-  response_type: structured
+  response_type: approval
   version: 1.0.0
   status: active
   input:
@@ -1063,7 +951,7 @@ tools:
   name: fee.update_student_bill_waiver
   entity: student_bill_waiver
   operation: update
-  description: Updates a student bill waiver.
+  description: Edits an existing waiver's type or value.
   capability: fee.student_bill_waiver.update
   required_parameters:
   - request
@@ -1081,7 +969,8 @@ tools:
   name: fee.get_fee_waiver_by_id
   entity: fee_waiver_by_id
   operation: read
-  description: Fetches a fee waiver by ID.
+  description: Fetches a fee waiver by ID. Note - the real service path is misspelled
+    (/fee-wavier/{id}), not /fee-waiver/.
   capability: fee.fee_waiver_by_id.read
   required_parameters:
   - waiver_id
@@ -1095,12 +984,12 @@ tools:
       waiver_id: str
   output:
     type: json
-- id: vidhya.fee.student_bill_waivers.read.get_student_bill_waivers
+- id: vidhya.fee.student_bill_waivers.list.get_student_bill_waivers
   name: fee.get_student_bill_waivers
   entity: student_bill_waivers
-  operation: read
+  operation: list
   description: Fetches student bill waivers by section.
-  capability: fee.student_bill_waivers.read
+  capability: fee.student_bill_waivers.list
   required_parameters:
   - section_id
   optional_parameters: []
@@ -1113,12 +1002,12 @@ tools:
       section_id: str
   output:
     type: json
-- id: vidhya.fee.student_bill_waivers_by_student.read.get_student_bill_waivers_by_student
+- id: vidhya.fee.student_bill_waivers_by_student.list.get_student_bill_waivers_by_student
   name: fee.get_student_bill_waivers_by_student
   entity: student_bill_waivers_by_student
-  operation: read
+  operation: list
   description: Fetches student bill waivers by student.
-  capability: fee.student_bill_waivers_by_student.read
+  capability: fee.student_bill_waivers_by_student.list
   required_parameters:
   - student_id
   optional_parameters: []
@@ -1167,12 +1056,12 @@ tools:
       request: UpdateFeeWaiverTypeRequest
   output:
     type: json
-- id: vidhya.fee.all_fee_waiver_types.read.get_all_fee_waiver_types
+- id: vidhya.fee.all_fee_waiver_types.list.get_all_fee_waiver_types
   name: fee.get_all_fee_waiver_types
   entity: all_fee_waiver_types
-  operation: read
+  operation: list
   description: Fetches fee waiver types for the request organization and branch.
-  capability: fee.all_fee_waiver_types.read
+  capability: fee.all_fee_waiver_types.list
   required_parameters: []
   optional_parameters: []
   response_type: structured
