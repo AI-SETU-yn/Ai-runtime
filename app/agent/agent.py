@@ -7,6 +7,7 @@ from app.agent.decision import DecisionEngine
 from app.agent.memory import MemoryInterface, RequestScopedMemory
 from app.agent.models import AgentDecisionAction, AgentState, AgentStatus, ReasoningContext
 from app.agent.observation import ObservationManager
+from app.agent.retry import ToolRetryHandler
 from app.agent.tool_discovery import ToolDiscovery
 from app.graph.nodes.current_info_router import CurrentInfoRouterNode
 from app.graph.nodes.response_generator import ResponseGeneratorNode
@@ -39,6 +40,7 @@ class GeneralAgent:
         tool_discovery: ToolDiscovery | None = None,
         current_info_router: CurrentInfoRouterNode | None = None,
         rbac_authorization_service: RBACAuthorizationService | None = None,
+        retry_handler: ToolRetryHandler | None = None,
     ) -> None:
         self._planner_service = planner_service
         self._tool_executor_service = tool_executor_service
@@ -49,6 +51,9 @@ class GeneralAgent:
         self._tool_discovery = tool_discovery or ToolDiscovery()
         self._current_info_router = current_info_router or CurrentInfoRouterNode()
         self._rbac_authorization_service = rbac_authorization_service
+        # Default policy performs no retries (max_attempts=1) - identical
+        # behavior to calling the tool executor directly. See app.agent.retry.
+        self._retry_handler = retry_handler or ToolRetryHandler()
 
     async def reason(self, state: AgentState) -> dict[str, object]:
         if state.resume_execution and state.planner_output is not None:
@@ -145,15 +150,26 @@ class GeneralAgent:
                     'tool_history': tool_history,
                 }
         try:
-            result = await self._tool_executor_service.execute(
-                planner_output=execution_target,
-                runtime_context=state.runtime_context,
-                request_id=state.request_id,
-                correlation_id=state.correlation_id,
-                trace_id=state.trace_id or '',
-                execution_state=state.execution_state,
-                clarification_answer=state.clarification_answer,
-                allow_clarification=True,
+            result = await self._retry_handler.run(
+                lambda: self._tool_executor_service.execute(
+                    planner_output=execution_target,
+                    runtime_context=state.runtime_context,
+                    request_id=state.request_id,
+                    correlation_id=state.correlation_id,
+                    trace_id=state.trace_id or '',
+                    execution_state=state.execution_state,
+                    clarification_answer=state.clarification_answer,
+                    allow_clarification=True,
+                ),
+                on_retry=lambda attempt, exc: logger.warning(
+                    'agent_tool_execution_retry_json\n%s',
+                    pretty_json({
+                        'intent': planner_output.intent,
+                        'tool_name': execution_target.tool,
+                        'attempt': attempt,
+                        'error_code': exc.code,
+                    }),
+                ),
             )
         except ToolExecutionError as exc:
             result = {
