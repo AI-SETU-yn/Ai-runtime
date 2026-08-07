@@ -1,0 +1,22 @@
+domain: vidhya
+service: academic
+server: vidhya-mcp
+protocol: mcp
+transport: streamable-http
+tools:
+  - id: vidhya.academic.holiday.read.get_holiday
+    name: academic.get_all_subjects
+    entity: holiday
+    operation: read
+    description: Fetches all subjects.
+    capability: academic.subject.list
+    required_parameters: []
+    optional_parameters: []
+    response_type: structured
+    version: 1.0.0
+    status: active
+    input:
+      schema_summary:
+        context: VidhyaRequestContext
+    output:
+      type: json

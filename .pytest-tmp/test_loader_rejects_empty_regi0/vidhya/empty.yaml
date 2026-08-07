@@ -1,0 +1,6 @@
+domain: vidhya
+service: academic
+server: vidhya-mcp
+protocol: mcp
+transport: streamable-http
+tools: []

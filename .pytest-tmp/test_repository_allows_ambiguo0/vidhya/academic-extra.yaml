@@ -1,0 +1,22 @@
+domain: vidhya
+service: academic
+server: vidhya-mcp
+protocol: mcp
+transport: streamable-http
+tools:
+  - id: vidhya.academic.subject.list.get_subjects_duplicate
+    name: academic.get_subjects_duplicate
+    entity: subject
+    operation: list
+    description: Fetches all subjects.
+    capability: academic.subject.list
+    required_parameters: []
+    optional_parameters: []
+    response_type: structured
+    version: 1.0.0
+    status: active
+    input:
+      schema_summary:
+        context: VidhyaRequestContext
+    output:
+      type: json
