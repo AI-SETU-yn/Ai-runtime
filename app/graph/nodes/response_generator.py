@@ -3,6 +3,7 @@ import re
 from typing import Any
 
 from app.graph.state import RuntimeState
+from app.guardrails.audit import GuardrailAuditEvent, metrics, record_audit_event
 from app.model_gateway.adapter_resolver import ModelGatewayAdapterResolver
 from app.model_gateway.client import ModelGatewayClient
 from app.model_gateway.exceptions import ModelGatewayError
@@ -61,6 +62,13 @@ class ResponseGeneratorNode:
                 'tool_result': response_tool_result,
                 'model_response': answer,
             }))
+            metrics.increment('grounding_retry')
+            record_audit_event(GuardrailAuditEvent(
+                guardrail_name='output.grounding_validation',
+                action='retry',
+                severity='medium',
+                detail=f'response_type={response_type} planner_intent={planner_output.intent}',
+            ))
             retry_request = self._with_validation_retry(request, answer)
             try:
                 retry_answer = await self._dispatch_generate(retry_request)

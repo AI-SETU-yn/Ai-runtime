@@ -1,9 +1,11 @@
 from __future__ import annotations
 
 import logging
+from time import perf_counter
 
 from app.exceptions.errors import GuardrailViolationError
 from app.guardrails import GuardrailEvaluationResult
+from app.guardrails.audit import GuardrailAuditEvent, metrics, record_audit_event
 from app.security.classifier import SecurityClassifier
 from app.security.models import SecurityClassificationResult, SecurityClassifierConfig, SecurityDecision
 
@@ -40,7 +42,10 @@ class SecurityClassificationService:
             trigger,
             len(guardrail_result.triggered),
         )
+        metrics.increment('classifier_invoked')
+        started = perf_counter()
         decision = await self._classifier.classify(message)
+        latency_ms = round((perf_counter() - started) * 1000, 2)
         normalized = self._normalize_decision(decision)
         logger.info(
             'security_classifier_decision safe=%s category=%s confidence=%s trigger=%s',
@@ -48,6 +53,15 @@ class SecurityClassificationService:
             normalized.category,
             normalized.confidence,
             trigger,
+        )
+        record_audit_event(
+            GuardrailAuditEvent(
+                guardrail_name='security_classifier',
+                action='allow' if normalized.safe else 'block',
+                severity='info' if normalized.safe else 'high',
+                latency_ms=latency_ms,
+                detail=f'trigger={trigger} category={normalized.category.value}',
+            )
         )
         return SecurityClassificationResult(executed=True, triggered_by=trigger, decision=normalized)
 

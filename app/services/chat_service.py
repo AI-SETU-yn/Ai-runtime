@@ -8,8 +8,16 @@ from app.guardrails import GuardrailEngine
 from app.models.chat import ChatRequest
 from app.models.execution import ExecutionState
 from app.models.planner import PlannerOutput
-from app.models.response import ChatResponse, ConversationMetadata, GuardrailMetadata, GuardrailOutcome, SecurityMetadata
+from app.models.response import (
+    ChatResponse,
+    ConversationMetadata,
+    GuardrailMetadata,
+    GuardrailOutcome,
+    SecurityMetadata,
+    TokenUsageMetadata,
+)
 from app.models.runtime import RuntimeContext
+from app.prompts.templates import PLANNER_PROMPT
 from app.security.service import SecurityClassificationService
 from app.utils.json_logging import pretty_json
 from app.utils.redaction import redact_sensitive
@@ -35,6 +43,13 @@ class ChatService:
         trace_id = runtime_context.trace_id or str(uuid.uuid4())
         defer_tags = self._security_classifier_service.config.suspicious_tags if self._security_classifier_service.should_defer_input_blocks() else []
         input_guardrail = self._guardrail_engine.enforce_input(request.message, defer_block_tags=defer_tags)
+        # Token-aware budget check, enforced before any model call (planner,
+        # security classifier, or generation). Runs alongside, not instead
+        # of, the input.max_length character-count rule above.
+        token_usage = self._guardrail_engine.check_token_budget(
+            user_message=request.message,
+            system_prompt=PLANNER_PROMPT,
+        )
         security_result = await self._security_classifier_service.classify_if_needed(
             message=input_guardrail.final_text,
             guardrail_result=input_guardrail,
@@ -114,8 +129,14 @@ class ChatService:
                 guardrails=GuardrailMetadata(
                     input=self._to_outcomes(input_guardrail),
                     output=self._to_outcomes(output_guardrail),
+                    pii_detected=input_guardrail.pii_detected or output_guardrail.pii_detected,
                 ),
                 security=self._to_security_metadata(security_result),
+                token_usage=TokenUsageMetadata(
+                    token_count=token_usage.token_count,
+                    token_limit=token_usage.token_limit,
+                    remaining_tokens=token_usage.remaining_tokens,
+                ),
             ),
         )
 

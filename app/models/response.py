@@ -11,6 +11,13 @@ class GuardrailOutcome(BaseModel):
 class GuardrailMetadata(BaseModel):
     input: list[GuardrailOutcome] = Field(default_factory=list)
     output: list[GuardrailOutcome] = Field(default_factory=list)
+    pii_detected: bool = False
+
+
+class TokenUsageMetadata(BaseModel):
+    token_count: int
+    token_limit: int
+    remaining_tokens: int
 
 
 class SecurityMetadata(BaseModel):
@@ -32,6 +39,7 @@ class ConversationMetadata(BaseModel):
     trace_id: str | None = None
     guardrails: GuardrailMetadata | None = None
     security: SecurityMetadata | None = None
+    token_usage: TokenUsageMetadata | None = None
 
 
 class ChatResponse(BaseModel):
