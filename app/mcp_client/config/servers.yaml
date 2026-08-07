@@ -4,6 +4,6 @@ servers:
     transport: streamable-http
     endpoint_path: /mcp
   vidhya-mcp:
-    url: env:VIDHYA_MCP_URL|http://localhost:8001
+    url: env:VIDHYA_MCP_URL|http://localhost:8002
     transport: streamable-http
     endpoint_path: /mcp
