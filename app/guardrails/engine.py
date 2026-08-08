@@ -215,7 +215,7 @@ class GuardrailEngine:
         return updated, self._decision(rule, defer_block_tags=defer_block_tags)
 
     def _apply_phone_candidate_rule(
-        self,
+         self,
         rule: GuardrailRule,
         text: str,
         *,
